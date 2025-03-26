@@ -12,8 +12,9 @@ app.use(cors());
 app.use(express.json());
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
 
-const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
+const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
 const faucetKeypair = Keypair.fromSecretKey(Uint8Array.from([/* Your 64-byte private key array */]));
+const FAUCET_ADDRESS = 'GQMVuJCiPuEGm5fBnRYocwACGt8mo97ZYiMfDxbiMkRn';
 const HCAPTCHA_SECRET = 'your-hcaptcha-secret'; // Replace with your hCaptcha secret
 const JWT_SECRET = 'your-secret-key'; // Replace with a strong secret
 const DAILY_PAYOUT_LIMIT = 1; // SOL per day
@@ -71,6 +72,20 @@ async function sendSol(toAddress, amount) {
     const signature = await connection.sendTransaction(transaction, [faucetKeypair]);
     await connection.confirmTransaction(signature);
     return signature;
+}
+
+async function getServerBalance() {
+    const balanceLamports = await connection.getBalance(new PublicKey(FAUCET_ADDRESS));
+    return balanceLamports / 1000000000; // Convert lamports to SOL
+}
+
+async function getTotalPayouts() {
+    return new Promise((resolve, reject) => {
+        db.get('SELECT SUM(reward) as total FROM plays WHERE reward > 0', (err, row) => {
+            if (err) return reject(err);
+            resolve(row.total || 0);
+        });
+    });
 }
 
 app.post('/start-game', async (req, res) => {
@@ -147,6 +162,17 @@ app.post('/update-game', async (req, res) => {
     } catch (error) {
         console.error('Update error:', error);
         res.status(500).json({ success: false, error: 'Server error' });
+    }
+});
+
+app.get('/server-stats', async (req, res) => {
+    try {
+        const balance = await getServerBalance();
+        const totalPayouts = await getTotalPayouts();
+        res.json({ success: true, balance, totalPayouts });
+    } catch (error) {
+        console.error('Server stats error:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch server stats' });
     }
 });
 
