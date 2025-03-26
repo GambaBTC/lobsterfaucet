@@ -20,9 +20,9 @@ const DAILY_PAYOUT_LIMIT_PER_ADDRESS = 0.01; // 0.01 SOL per address per day
 const DAILY_PAYOUT_LIMIT_SERVER = 1; // 1 SOL total per day for the server
 
 // Initialize SQLite database with error handling
-const db = new sqlite3.Database('plays.db', (err) => {
+const db = new sqlite3.Database('plays.db', sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, (err) => {
     if (err) {
-        console.error('Failed to connect to SQLite database:', err.message);
+        console.error('Failed to open or create SQLite database:', err.message);
         process.exit(1); // Exit if database connection fails
     }
     console.log('Connected to SQLite database.');
@@ -51,7 +51,6 @@ async function checkEligibility(address, ip) {
         const now = Date.now();
         const oneDayAgo = now - 24 * 60 * 60 * 1000;
 
-        // Check per-address limit and play restriction
         db.get('SELECT SUM(reward) as dailyTotal, MAX(timestamp) as lastPlayed FROM plays WHERE address = ? AND timestamp > ?', 
             [address, oneDayAgo], (err, row) => {
                 if (err) {
@@ -131,21 +130,23 @@ async function sendSol(toAddress, amount) {
 
 async function getServerBalance() {
     try {
+        console.log('Fetching server balance from Solana RPC...');
         const balanceLamports = await connection.getBalance(new PublicKey(FAUCET_ADDRESS));
         const balance = balanceLamports / 1000000000;
         console.log(`Server balance fetched: ${balance} SOL`);
         return balance;
     } catch (error) {
-        console.error('Error fetching server balance:', error.message);
+        console.error('Error fetching server balance:', error.message, error.stack);
         throw error;
     }
 }
 
 async function getTotalPayouts() {
     return new Promise((resolve, reject) => {
+        console.log('Querying total payouts from database...');
         db.get('SELECT SUM(reward) as total FROM plays WHERE reward > 0', (err, row) => {
             if (err) {
-                console.error('Database query error in getTotalPayouts:', err.message);
+                console.error('Database query error in getTotalPayouts:', err.message, err.stack);
                 return reject(err);
             }
             const total = row.total || 0;
@@ -181,7 +182,7 @@ app.post('/start-game', async (req, res) => {
             });
         res.json({ success: true, token, sessionId });
     } catch (error) {
-        console.error('Error in /start-game:', error.message);
+        console.error('Error in /start-game:', error.message, error.stack);
         res.status(500).json({ success: false, error: 'Server error' });
     }
 });
@@ -263,7 +264,7 @@ app.post('/update-game', async (req, res) => {
             res.json({ success: true });
         });
     } catch (error) {
-        console.error('Error in /update-game:', error.message);
+        console.error('Error in /update-game:', error.message, error.stack);
         res.status(500).json({ success: false, error: 'Server error' });
     }
 });
@@ -273,9 +274,10 @@ app.get('/server-stats', async (req, res) => {
     try {
         const balance = await getServerBalance();
         const totalPayouts = await getTotalPayouts();
+        console.log(`Sending /server-stats response: balance=${balance}, totalPayouts=${totalPayouts}`);
         res.json({ success: true, balance, totalPayouts });
     } catch (error) {
-        console.error('Server stats error:', error.message);
+        console.error('Server stats error:', error.message, error.stack);
         res.status(500).json({ success: false, error: 'Failed to fetch server stats' });
     }
 });
