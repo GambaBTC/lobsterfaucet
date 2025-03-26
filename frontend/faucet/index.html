@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lobster Invaders - Solana Faucet</title>
-    <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
     <style>
         body {
             margin: 0;
@@ -189,7 +188,6 @@
             <div id="server-balance">Server Balance: Loading...</div>
             <div id="total-payouts">Total Payouts: Loading...</div>
             <input type="text" id="sol-address-input" placeholder="Your Solana Address">
-            <div class="h-captcha" data-sitekey="27548bb4-80aa-4174-9cc4-e40636b4467e"></div>
             <div id="ad-container">
                 <p>Follow me on X - <a href="https://x.com/LobsterDev" target="_blank">@LobsterDev</a></p>
             </div>
@@ -980,7 +978,6 @@
 
         submitAddressButton.addEventListener('click', async () => {
             const address = solAddressInput.value.trim();
-            const captchaResponse = hcaptcha.getResponse();
             faucetError.style.display = 'none';
 
             if (!address || address.length !== 44 || !/^[1-9A-HJ-NP-Za-km-z]+$/.test(address)) {
@@ -993,13 +990,12 @@
                 const response = await fetch(`${BASE_URL}/start-game`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ address, captchaResponse })
+                    body: JSON.stringify({ address })
                 });
                 const result = await response.json();
                 if (!result.success) {
                     faucetError.textContent = result.error;
                     faucetError.style.display = 'block';
-                    hcaptcha.reset();
                     return;
                 }
                 playerAddress = address;
@@ -1017,13 +1013,11 @@
         restartButton.addEventListener('click', () => {
             faucetScreen.style.display = 'flex';
             gameOverScreen.style.display = 'none';
-            hcaptcha.reset();
             fetchServerStats();
         });
         victoryRestartButton.addEventListener('click', () => {
             faucetScreen.style.display = 'flex';
             victoryScreen.style.display = 'none';
-            hcaptcha.reset();
             fetchServerStats();
         });
         pauseButton.addEventListener('click', togglePause);
