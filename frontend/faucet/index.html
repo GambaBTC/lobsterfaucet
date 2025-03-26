@@ -222,840 +222,839 @@
             <div class="control-button" id="right-button">▶</div>
         </div>
     </div>
-
     <script>
-        const canvas = document.getElementById('game-canvas');
-        const ctx = canvas.getContext('2d');
-        
-        const faucetScreen = document.getElementById('faucet-screen');
-        const startScreen = document.getElementById('start-screen');
-        const gameOverScreen = document.getElementById('game-over-screen');
-        const victoryScreen = document.getElementById('victory-screen');
-        const solAddressInput = document.getElementById('sol-address-input');
-        const submitAddressButton = document.getElementById('submit-address-button');
-        const faucetError = document.getElementById('faucet-error');
-        const startButton = document.getElementById('start-button');
-        const restartButton = document.getElementById('restart-button');
-        const victoryRestartButton = document.getElementById('victory-restart-button');
-        const scoreDisplay = document.getElementById('score-display');
-        const waveDisplay = document.getElementById('wave-display');
-        const livesDisplay = document.getElementById('lives-display');
-        const finalScoreDisplay = document.getElementById('final-score');
-        const victoryScoreDisplay = document.getElementById('victory-score');
-        const rewardMessage = document.getElementById('reward-message');
-        const victoryRewardMessage = document.getElementById('victory-reward');
-        const pauseButton = document.getElementById('pause-button');
-        const mobileControls = document.getElementById('mobile-controls');
-        const leftButton = document.getElementById('left-button');
-        const rightButton = document.getElementById('right-button');
-        const fireButton = document.getElementById('fire-button');
-        const serverBalanceDisplay = document.getElementById('server-balance');
-        const totalPayoutsDisplay = document.getElementById('total-payouts');
-        
-        canvas.width = 800;
-        canvas.height = 600;
-        
-        let animationId;
-        let gameActive = false;
-        let gamePaused = false;
-        let score = 0;
-        let lives = 3;
-        let wave = 1;
-        let lastTime = 0;
-        const FINAL_WAVE = 10;
-        let playerAddress = '';
-        let gameToken = '';
-        let sessionId = '';
-        let lastMoveTime = 0;
-        let moveCount = 0;
-        let lastUpdateTime = 0;
-        
-        let player;
-        let bullets = [];
-        let enemies = [];
-        let enemyBullets = [];
-        let explosions = [];
-        
-        const keys = { ArrowLeft: false, ArrowRight: false, Space: false };
-        const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    const canvas = document.getElementById('game-canvas');
+    const ctx = canvas.getContext('2d');
+    
+    const faucetScreen = document.getElementById('faucet-screen');
+    const startScreen = document.getElementById('start-screen');
+    const gameOverScreen = document.getElementById('game-over-screen');
+    const victoryScreen = document.getElementById('victory-screen');
+    const solAddressInput = document.getElementById('sol-address-input');
+    const submitAddressButton = document.getElementById('submit-address-button');
+    const faucetError = document.getElementById('faucet-error');
+    const startButton = document.getElementById('start-button');
+    const restartButton = document.getElementById('restart-button');
+    const victoryRestartButton = document.getElementById('victory-restart-button');
+    const scoreDisplay = document.getElementById('score-display');
+    const waveDisplay = document.getElementById('wave-display');
+    const livesDisplay = document.getElementById('lives-display');
+    const finalScoreDisplay = document.getElementById('final-score');
+    const victoryScoreDisplay = document.getElementById('victory-score');
+    const rewardMessage = document.getElementById('reward-message');
+    const victoryRewardMessage = document.getElementById('victory-reward');
+    const pauseButton = document.getElementById('pause-button');
+    const mobileControls = document.getElementById('mobile-controls');
+    const leftButton = document.getElementById('left-button');
+    const rightButton = document.getElementById('right-button');
+    const fireButton = document.getElementById('fire-button');
+    const serverBalanceDisplay = document.getElementById('server-balance');
+    const totalPayoutsDisplay = document.getElementById('total-payouts');
+    
+    canvas.width = 800;
+    canvas.height = 600;
+    
+    let animationId;
+    let gameActive = false;
+    let gamePaused = false;
+    let score = 0;
+    let lives = 3;
+    let wave = 1;
+    let lastTime = 0;
+    const FINAL_WAVE = 10;
+    let playerAddress = '';
+    let gameToken = '';
+    let sessionId = '';
+    let lastMoveTime = 0;
+    let moveCount = 0;
+    let lastUpdateTime = 0;
+    
+    let player;
+    let bullets = [];
+    let enemies = [];
+    let enemyBullets = [];
+    let explosions = [];
+    
+    const keys = { ArrowLeft: false, ArrowRight: false, Space: false };
+    const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
-        const BASE_URL = 'https://faucet.solanalobster.com';
+    const BASE_URL = 'https://faucet.solanalobster.com';
 
-        // Fetch server balance and total payouts on load
-        async function fetchServerStats() {
-            try {
-                console.log('Fetching server stats from', `${BASE_URL}/server-stats`);
-                const response = await fetch(`${BASE_URL}/server-stats`, { method: 'GET' });
-                if (!response.ok) {
-                    throw new Error(`Server responded with status: ${response.status} - ${response.statusText}`);
-                }
-                const data = await response.json();
-                console.log('Server stats response:', data);
-                if (data.success) {
-                    serverBalanceDisplay.textContent = `Server Balance: ${data.balance.toFixed(4)} SOL`;
-                    totalPayoutsDisplay.textContent = `Total Payouts: ${data.totalPayouts.toFixed(4)} SOL`;
-                } else {
-                    throw new Error(`Server returned failure: ${data.error || 'Unknown error'}`);
-                }
-            } catch (error) {
-                console.error('Failed to fetch server stats:', error.message);
-                serverBalanceDisplay.textContent = 'Server Balance: Error';
-                totalPayoutsDisplay.textContent = 'Total Payouts: Error';
+    // Fetch server balance and total payouts on load
+    async function fetchServerStats() {
+        try {
+            console.log('Fetching server stats from', `${BASE_URL}/server-stats`);
+            const response = await fetch(`${BASE_URL}/server-stats`, { method: 'GET' });
+            if (!response.ok) throw new Error(`Server responded with status: ${response.status}`);
+            const data = await response.json();
+            console.log('Server stats response:', data);
+            if (data.success) {
+                serverBalanceDisplay.textContent = `Server Balance: ${data.balance.toFixed(4)} SOL`;
+                totalPayoutsDisplay.textContent = `Total Payouts: ${data.totalPayouts.toFixed(4)} SOL`;
+            } else throw new Error(data.error || 'Unknown error');
+        } catch (error) {
+            console.error('Failed to fetch server stats:', error.message);
+            serverBalanceDisplay.textContent = 'Server Balance: Error';
+            totalPayoutsDisplay.textContent = 'Total Payouts: Error';
+        }
+    }
+    fetchServerStats();
+
+    class Player {
+        constructor() {
+            this.width = 60;
+            this.height = 30;
+            this.x = canvas.width / 2 - this.width / 2;
+            this.y = canvas.height - 60;
+            this.speed = 6;
+            this.color = '#4a90e2';
+            this.cooldown = 0;
+            this.maxCooldown = 35;
+            this.invulnerable = false;
+            this.invulnerableTime = 0;
+            this.invulnerableDuration = 60;
+        }
+        
+        draw() {
+            if (this.invulnerable && Math.floor(Date.now() / 100) % 2 === 0) return;
+            ctx.fillStyle = this.color;
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y);
+            ctx.lineTo(this.x + this.width, this.y);
+            ctx.lineTo(this.x + this.width - 10, this.y + this.height);
+            ctx.lineTo(this.x + 10, this.y + this.height);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = '#1e3d59';
+            ctx.fillRect(this.x + this.width/4, this.y - 15, this.width/2, 15);
+            ctx.fillStyle = '#dddddd';
+            ctx.fillRect(this.x + this.width/2 - 3, this.y - 25, 6, 15);
+            ctx.fillStyle = '#7bbfff';
+            ctx.fillRect(this.x + this.width/4 + 5, this.y - 12, 8, 8);
+            ctx.fillRect(this.x + this.width/4 + this.width/2 - 13, this.y - 12, 8, 8);
+            ctx.strokeStyle = '#dddddd';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(this.x + this.width/2, this.y - 15);
+            ctx.lineTo(this.x + this.width/2, this.y - 30);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(this.x + this.width/2, this.y - 30, 4, 0, Math.PI * 2);
+            ctx.stroke();
+            if (this.cooldown > 0) {
+                const cooldownPercentage = this.cooldown / this.maxCooldown;
+                ctx.fillStyle = `rgba(255, 0, 0, ${cooldownPercentage})`;
+                ctx.fillRect(this.x, this.y + this.height + 5, this.width * cooldownPercentage, 3);
             }
         }
-        fetchServerStats();
-
-        class Player {
-            constructor() {
-                this.width = 60;
-                this.height = 30;
-                this.x = canvas.width / 2 - this.width / 2;
-                this.y = canvas.height - 60;
-                this.speed = 6;
-                this.color = '#4a90e2';
-                this.cooldown = 0;
-                this.maxCooldown = 35;
-                this.invulnerable = false;
-                this.invulnerableTime = 0;
-                this.invulnerableDuration = 60;
+        
+        update() {
+            const now = Date.now();
+            if (keys.ArrowLeft && this.x > 0) {
+                this.x -= this.speed;
+                lastMoveTime = now;
+                moveCount++;
             }
-            
-            draw() {
-                if (this.invulnerable && Math.floor(Date.now() / 100) % 2 === 0) return;
-                ctx.fillStyle = this.color;
-                ctx.beginPath();
-                ctx.moveTo(this.x, this.y);
-                ctx.lineTo(this.x + this.width, this.y);
-                ctx.lineTo(this.x + this.width - 10, this.y + this.height);
-                ctx.lineTo(this.x + 10, this.y + this.height);
-                ctx.closePath();
-                ctx.fill();
-                ctx.fillStyle = '#1e3d59';
-                ctx.fillRect(this.x + this.width/4, this.y - 15, this.width/2, 15);
-                ctx.fillStyle = '#dddddd';
-                ctx.fillRect(this.x + this.width/2 - 3, this.y - 25, 6, 15);
-                ctx.fillStyle = '#7bbfff';
-                ctx.fillRect(this.x + this.width/4 + 5, this.y - 12, 8, 8);
-                ctx.fillRect(this.x + this.width/4 + this.width/2 - 13, this.y - 12, 8, 8);
-                ctx.strokeStyle = '#dddddd';
+            if (keys.ArrowRight && this.x < canvas.width - this.width) {
+                this.x += this.speed;
+                lastMoveTime = now;
+                moveCount++;
+            }
+            if (this.cooldown > 0) this.cooldown--;
+            if (keys.Space && this.cooldown === 0) {
+                this.shoot();
+                this.cooldown = this.maxCooldown;
+            }
+            if (this.invulnerable) {
+                this.invulnerableTime++;
+                if (this.invulnerableTime >= this.invulnerableDuration) {
+                    this.invulnerable = false;
+                    this.invulnerableTime = 0;
+                }
+            }
+        }
+        
+        shoot() {
+            bullets.push(new Bullet(this.x + this.width / 2 - 2, this.y - 25, 4, 10, '#ffffff', 8));
+            updateServer('shoot');
+        }
+
+        hit() {
+            if (!this.invulnerable) {
+                lives--;
+                livesDisplay.textContent = `Lives: ${lives}`;
+                this.invulnerable = true;
+                this.invulnerableTime = 0;
+                updateServer('hit');
+                if (lives <= 0) gameOver();
+            }
+        }
+    }
+    
+    class Bullet {
+        constructor(x, y, width, height, color, speed) {
+            this.x = x;
+            this.y = y;
+            this.width = width;
+            this.height = height;
+            this.color = color;
+            this.speed = speed;
+            this.trail = [];
+            this.maxTrailLength = 5;
+        }
+        
+        draw() {
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x, this.y, this.width, this.height);
+            for (let i = 0; i < this.trail.length; i++) {
+                const opacity = 1 - (i / this.trail.length);
+                ctx.fillStyle = `rgba(255, 255, 255, ${opacity * 0.5})`;
+                const pos = this.trail[i];
+                ctx.fillRect(pos.x, pos.y, this.width, this.height);
+            }
+        }
+        
+        update() {
+            this.trail.unshift({ x: this.x, y: this.y });
+            if (this.trail.length > this.maxTrailLength) this.trail.pop();
+            this.y -= this.speed;
+        }
+    }
+    
+    class EnemyBullet {
+        constructor(x, y) {
+            this.x = x;
+            this.y = y;
+            this.width = 4;
+            this.height = 10;
+            this.color = '#ff7700';
+            this.speed = 4 + Math.random() * 2;
+            this.trail = [];
+            this.maxTrailLength = 3;
+        }
+        
+        draw() {
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x, this.y, this.width, this.height);
+            for (let i = 0; i < this.trail.length; i++) {
+                const opacity = 1 - (i / this.trail.length);
+                ctx.fillStyle = `rgba(255, 119, 0, ${opacity * 0.5})`;
+                const pos = this.trail[i];
+                ctx.fillRect(pos.x, pos.y, this.width, this.height);
+            }
+        }
+        
+        update() {
+            this.trail.unshift({ x: this.x, y: this.y });
+            if (this.trail.length > this.maxTrailLength) this.trail.pop();
+            this.y += this.speed;
+        }
+    }
+    
+    class Enemy {
+        constructor(x, y, size, color, health, points, speed, shootRate) {
+            this.x = x;
+            this.y = y;
+            this.width = size;
+            this.height = size;
+            this.color = color;
+            this.health = health;
+            this.points = points;
+            this.speed = speed;
+            this.direction = Math.random() > 0.5 ? 1 : -1;
+            this.shootRate = shootRate;
+            this.animFrame = 0;
+            this.animDelay = 10;
+            this.animCounter = 0;
+            this.sinking = false;
+            this.sinkSpeed = 2;
+            this.rotation = 0;
+            this.maxRotation = Math.PI / 6;
+        }
+        
+        draw() {
+            this.animCounter++;
+            if (this.animCounter >= this.animDelay) {
+                this.animCounter = 0;
+                this.animFrame = (this.animFrame + 1) % 2;
+            }
+            const scale = this.width / 40;
+            ctx.save();
+            ctx.translate(this.x + this.width/2, this.y + this.height/2);
+            if (this.sinking) ctx.rotate(this.rotation);
+            ctx.scale(scale, scale);
+            const clawOffset = this.animFrame === 0 ? 0 : 3;
+            ctx.fillStyle = this.color;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 15, 18, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(0, 15, 10, 5, 0, 0, Math.PI);
+            ctx.fill();
+            for (let i = -1; i <= 1; i++) {
+                ctx.strokeStyle = this.color;
                 ctx.lineWidth = 2;
                 ctx.beginPath();
-                ctx.moveTo(this.x + this.width/2, this.y - 15);
-                ctx.lineTo(this.x + this.width/2, this.y - 30);
+                ctx.moveTo(-15, i * 5);
+                ctx.lineTo(-25, i * 10);
                 ctx.stroke();
                 ctx.beginPath();
-                ctx.arc(this.x + this.width/2, this.y - 30, 4, 0, Math.PI * 2);
+                ctx.moveTo(15, i * 5);
+                ctx.lineTo(25, i * 10);
                 ctx.stroke();
-                if (this.cooldown > 0) {
-                    const cooldownPercentage = this.cooldown / this.maxCooldown;
-                    ctx.fillStyle = `rgba(255, 0, 0, ${cooldownPercentage})`;
-                    ctx.fillRect(this.x, this.y + this.height + 5, this.width * cooldownPercentage, 3);
-                }
             }
-            
-            update() {
-                const now = Date.now();
-                if (keys.ArrowLeft && this.x > 0) {
-                    this.x -= this.speed;
-                    lastMoveTime = now;
-                    moveCount++;
-                }
-                if (keys.ArrowRight && this.x < canvas.width - this.width) {
-                    this.x += this.speed;
-                    lastMoveTime = now;
-                    moveCount++;
-                }
-                if (this.cooldown > 0) this.cooldown--;
-                if (keys.Space && this.cooldown === 0) {
-                    this.shoot();
-                    this.cooldown = this.maxCooldown;
-                }
-                if (this.invulnerable) {
-                    this.invulnerableTime++;
-                    if (this.invulnerableTime >= this.invulnerableDuration) {
-                        this.invulnerable = false;
-                        this.invulnerableTime = 0;
-                    }
-                }
-            }
-            
-            shoot() {
-                bullets.push(new Bullet(this.x + this.width / 2 - 2, this.y - 25, 4, 10, '#ffffff', 8));
-                updateServer('shoot');
-            }
-
-            hit() {
-                if (!this.invulnerable) {
-                    lives--;
-                    livesDisplay.textContent = `Lives: ${lives}`;
-                    this.invulnerable = true;
-                    this.invulnerableTime = 0;
-                    updateServer('hit');
-                    if (lives <= 0) gameOver();
-                }
-            }
-        }
-        
-        class Bullet {
-            constructor(x, y, width, height, color, speed) {
-                this.x = x;
-                this.y = y;
-                this.width = width;
-                this.height = height;
-                this.color = color;
-                this.speed = speed;
-                this.trail = [];
-                this.maxTrailLength = 5;
-            }
-            
-            draw() {
-                ctx.fillStyle = this.color;
-                ctx.fillRect(this.x, this.y, this.width, this.height);
-                for (let i = 0; i < this.trail.length; i++) {
-                    const opacity = 1 - (i / this.trail.length);
-                    ctx.fillStyle = `rgba(255, 255, 255, ${opacity * 0.5})`;
-                    const pos = this.trail[i];
-                    ctx.fillRect(pos.x, pos.y, this.width, this.height);
-                }
-            }
-            
-            update() {
-                this.trail.unshift({ x: this.x, y: this.y });
-                if (this.trail.length > this.maxTrailLength) this.trail.pop();
-                this.y -= this.speed;
-            }
-        }
-        
-        class EnemyBullet {
-            constructor(x, y) {
-                this.x = x;
-                this.y = y;
-                this.width = 4;
-                this.height = 10;
-                this.color = '#ff7700';
-                this.speed = 4 + Math.random() * 2;
-                this.trail = [];
-                this.maxTrailLength = 3;
-            }
-            
-            draw() {
-                ctx.fillStyle = this.color;
-                ctx.fillRect(this.x, this.y, this.width, this.height);
-                for (let i = 0; i < this.trail.length; i++) {
-                    const opacity = 1 - (i / this.trail.length);
-                    ctx.fillStyle = `rgba(255, 119, 0, ${opacity * 0.5})`;
-                    const pos = this.trail[i];
-                    ctx.fillRect(pos.x, pos.y, this.width, this.height);
-                }
-            }
-            
-            update() {
-                this.trail.unshift({ x: this.x, y: this.y });
-                if (this.trail.length > this.maxTrailLength) this.trail.pop();
-                this.y += this.speed;
-            }
-        }
-        
-        class Enemy {
-            constructor(x, y, size, color, health, points, speed, shootRate) {
-                this.x = x;
-                this.y = y;
-                this.width = size;
-                this.height = size;
-                this.color = color;
-                this.health = health;
-                this.points = points;
-                this.speed = speed;
-                this.direction = Math.random() > 0.5 ? 1 : -1;
-                this.shootRate = shootRate;
-                this.animFrame = 0;
-                this.animDelay = 10;
-                this.animCounter = 0;
-                this.sinking = false;
-                this.sinkSpeed = 2;
-                this.rotation = 0;
-                this.maxRotation = Math.PI / 6;
-            }
-            
-            draw() {
-                this.animCounter++;
-                if (this.animCounter >= this.animDelay) {
-                    this.animCounter = 0;
-                    this.animFrame = (this.animFrame + 1) % 2;
-                }
-                const scale = this.width / 40;
-                ctx.save();
-                ctx.translate(this.x + this.width/2, this.y + this.height/2);
-                if (this.sinking) ctx.rotate(this.rotation);
-                ctx.scale(scale, scale);
-                const clawOffset = this.animFrame === 0 ? 0 : 3;
-                ctx.fillStyle = this.color;
-                ctx.beginPath();
-                ctx.ellipse(0, 0, 15, 18, 0, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.beginPath();
-                ctx.ellipse(0, 15, 10, 5, 0, 0, Math.PI);
-                ctx.fill();
-                for (let i = -1; i <= 1; i++) {
-                    ctx.strokeStyle = this.color;
-                    ctx.lineWidth = 2;
-                    ctx.beginPath();
-                    ctx.moveTo(-15, i * 5);
-                    ctx.lineTo(-25, i * 10);
-                    ctx.stroke();
-                    ctx.beginPath();
-                    ctx.moveTo(15, i * 5);
-                    ctx.lineTo(25, i * 10);
-                    ctx.stroke();
-                }
-                ctx.fillStyle = this.color;
-                ctx.beginPath();
-                ctx.moveTo(-15, -5);
-                ctx.lineTo(-28, -15 - clawOffset);
-                ctx.lineTo(-32, -10);
-                ctx.lineTo(-28, -5 + clawOffset);
-                ctx.lineTo(-15, -5);
-                ctx.fill();
-                ctx.beginPath();
-                ctx.moveTo(15, -5);
-                ctx.lineTo(28, -15 - clawOffset);
-                ctx.lineTo(32, -10);
-                ctx.lineTo(28, -5 + clawOffset);
-                ctx.lineTo(15, -5);
-                ctx.fill();
+            ctx.fillStyle = this.color;
+            ctx.beginPath();
+            ctx.moveTo(-15, -5);
+            ctx.lineTo(-28, -15 - clawOffset);
+            ctx.lineTo(-32, -10);
+            ctx.lineTo(-28, -5 + clawOffset);
+            ctx.lineTo(-15, -5);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(15, -5);
+            ctx.lineTo(28, -15 - clawOffset);
+            ctx.lineTo(32, -10);
+            ctx.lineTo(28, -5 + clawOffset);
+            ctx.lineTo(15, -5);
+            ctx.fill();
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(-8, -8, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(8, -8, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'black';
+            ctx.beginPath();
+            ctx.arc(-8, -8, 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(8, -8, 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = this.color;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(-6, -18);
+            ctx.lineTo(-10, -25);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(6, -18);
+            ctx.lineTo(10, -25);
+            ctx.stroke();
+            if (this.health > 1 && !this.sinking) {
                 ctx.fillStyle = 'white';
-                ctx.beginPath();
-                ctx.arc(-8, -8, 4, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.beginPath();
-                ctx.arc(8, -8, 4, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.fillStyle = 'black';
-                ctx.beginPath();
-                ctx.arc(-8, -8, 2, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.beginPath();
-                ctx.arc(8, -8, 2, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.strokeStyle = this.color;
-                ctx.lineWidth = 1;
-                ctx.beginPath();
-                ctx.moveTo(-6, -18);
-                ctx.lineTo(-10, -25);
-                ctx.stroke();
-                ctx.beginPath();
-                ctx.moveTo(6, -18);
-                ctx.lineTo(10, -25);
-                ctx.stroke();
-                if (this.health > 1 && !this.sinking) {
-                    ctx.fillStyle = 'white';
-                    ctx.font = '12px Arial';
-                    ctx.textAlign = 'center';
-                    ctx.fillText(this.health, 0, 5);
-                    ctx.textAlign = 'left';
-                }
-                ctx.restore();
-            }
-            
-            update() {
-                if (this.sinking) {
-                    this.y += this.sinkSpeed;
-                    this.rotation = Math.min(this.maxRotation, this.rotation + 0.03);
-                    return this.y < canvas.height + 100;
-                } else {
-                    this.x += this.speed * this.direction;
-                    if (this.x <= 0 || this.x + this.width >= canvas.width) this.direction *= -1;
-                    if (Math.random() < this.shootRate) this.shoot();
-                    return true;
-                }
-            }
-            
-            shoot() {
-                enemyBullets.push(new EnemyBullet(this.x + this.width / 2 - 2, this.y + this.height));
-            }
-            
-            hit() {
-                this.health--;
-                if (this.health <= 0) {
-                    this.sinking = true;
-                    score += this.points;
-                    scoreDisplay.textContent = `Score: ${score}`;
-                    updateServer('enemy-killed');
-                    return true;
-                }
-                return false;
-            }
-        }
-        
-        class Explosion {
-            constructor(x, y, color) {
-                this.x = x;
-                this.y = y;
-                this.radius = 5;
-                this.maxRadius = 30;
-                this.color = color;
-                this.alpha = 1;
-                this.expandSpeed = 1.5;
-                this.fadeSpeed = 0.05;
-                this.particles = [];
-                const particleCount = 12 + Math.floor(Math.random() * 8);
-                for (let i = 0; i < particleCount; i++) {
-                    const angle = (i / particleCount) * Math.PI * 2;
-                    const speed = 1 + Math.random() * 2;
-                    this.particles.push({
-                        x: this.x,
-                        y: this.y,
-                        vx: Math.cos(angle) * speed,
-                        vy: Math.sin(angle) * speed,
-                        radius: 1 + Math.random() * 3,
-                        alpha: 1
-                    });
-                }
-            }
-            
-            draw() {
-                ctx.globalAlpha = this.alpha;
-                ctx.fillStyle = this.color;
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-                ctx.fill();
-                for (const particle of this.particles) {
-                    ctx.globalAlpha = particle.alpha;
-                    ctx.fillStyle = this.color;
-                    ctx.beginPath();
-                    ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-                ctx.globalAlpha = 1;
-            }
-            
-            update() {
-                this.radius += this.expandSpeed;
-                this.alpha -= this.fadeSpeed;
-                for (const particle of this.particles) {
-                    particle.x += particle.vx;
-                    particle.y += particle.vy;
-                    particle.alpha -= 0.02;
-                }
-                return this.alpha > 0 && this.radius < this.maxRadius;
-            }
-        }
-        
-        function createEnemies() {
-            enemies = enemies.filter(enemy => !enemy.sinking);
-            if (wave > FINAL_WAVE) {
-                victory();
-                return;
-            }
-            let difficultyMultiplier = wave <= 3 ? 1.0 + (wave * 0.15) : wave <= 5 ? 1.2 + ((wave - 3) * 0.15) : 1.6 + ((wave - 5) * 0.2);
-            waveDisplay.textContent = `Wave: ${wave}/${FINAL_WAVE}`;
-            let rows = wave <= 3 ? 4 : wave <= 5 ? 4 : Math.min(5, 4 + Math.floor((wave - 5) / 2));
-            const cols = wave <= 3 ? 9 : wave <= 5 ? 8 : Math.min(10, 8 + Math.floor((wave - 5) / 2));
-            const totalWidth = canvas.width * 0.85;
-            const xMargin = (canvas.width - totalWidth) / 2;
-            const colSpacing = totalWidth / (cols - 1);
-            const yStart = 60;
-            const rowSpacing = 60;
-            for (let row = 0; row < rows; row++) {
-                for (let col = 0; col < cols; col++) {
-                    const size = 40 - (row * 5);
-                    const colors = ['#ff0000', '#ff6600', '#ff9900', '#ffcc00', '#ffee00'];
-                    let health = wave <= 3 ? (row === 0 ? 1 + wave : row === 1 ? 1 + Math.floor(wave / 2) : row === 2 && wave >= 2 ? 2 : 1) :
-                                 wave <= 5 ? (row === 0 ? 2 + Math.floor((wave - 3) / 2) : row === 1 ? 2 : row === 2 && wave >= 5 ? 2 : 1) :
-                                 (row === 0 ? Math.min(5, 3 + Math.floor((wave - 5) / 2)) : row === 1 ? Math.min(4, 2 + Math.floor((wave - 5) / 2)) : row === 2 ? Math.min(3, 1 + Math.floor((wave - 5) / 2)) : 1 + Math.floor((wave - 8) / 2));
-                    const points = 10 * (rows - row) * health * (1 + (wave * 0.1));
-                    const speed = (wave <= 3 ? 0.7 + (row * 0.2) : 0.7 + (row * 0.15)) * difficultyMultiplier;
-                    const shootRate = (wave <= 3 ? 0.0006 : 0.0004) * difficultyMultiplier * (1 + (row * 0.3));
-                    const xPos = xMargin + (col * colSpacing) - (size / 2);
-                    const yPos = yStart + (row * rowSpacing);
-                    enemies.push(new Enemy(xPos, yPos, size, colors[row % colors.length], health, points, speed, shootRate));
-                }
-            }
-            updateServer('wave-start');
-            if (wave > 3) drawWaveMessage();
-        }
-        
-        function drawWaveMessage() {
-            const overlay = document.createElement('div');
-            overlay.style.position = 'absolute';
-            overlay.style.left = '0';
-            overlay.style.top = '0';
-            overlay.style.width = '100%';
-            overlay.style.height = '100%';
-            overlay.style.display = 'flex';
-            overlay.style.alignItems = 'center';
-            overlay.style.justifyContent = 'center';
-            overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-            overlay.style.zIndex = '30';
-            overlay.style.transition = 'opacity 1s';
-            const messageBox = document.createElement('div');
-            messageBox.style.textAlign = 'center';
-            let waveTitle = wave === FINAL_WAVE ? "FINAL WAVE" : `WAVE ${wave}`;
-            let waveMessage = wave === FINAL_WAVE ? "Defeat the lobster commander!" : wave <= 5 ? "The lobsters are getting stronger!" : "Elite forces have arrived!";
-            messageBox.innerHTML = `
-                <h1 style="color: #f0a500; font-size: 48px; margin-bottom: 10px;">${waveTitle}</h1>
-                <p style="color: white; font-size: 24px;">${waveMessage}</p>
-            `;
-            overlay.appendChild(messageBox);
-            document.getElementById('game-container').appendChild(overlay);
-            gamePaused = true;
-            setTimeout(() => {
-                overlay.style.opacity = '0';
-                setTimeout(() => {
-                    document.getElementById('game-container').removeChild(overlay);
-                    gamePaused = false;
-                }, 1000);
-            }, 2000);
-        }
-        
-        function checkCollisions() {
-            const bulletsToRemove = new Set();
-            const enemyBulletsToRemove = new Set();
-            for (let i = 0; i < bullets.length; i++) {
-                if (bulletsToRemove.has(i)) continue;
-                const bullet = bullets[i];
-                let bulletHit = false;
-                for (let j = 0; j < enemies.length; j++) {
-                    const enemy = enemies[j];
-                    if (enemy.sinking) continue;
-                    if (
-                        bullet.x < enemy.x + enemy.width &&
-                        bullet.x + bullet.width > enemy.x &&
-                        bullet.y < enemy.y + enemy.height &&
-                        bullet.y + bullet.height > enemy.y
-                    ) {
-                        bulletsToRemove.add(i);
-                        bulletHit = true;
-                        explosions.push(new Explosion(bullet.x + bullet.width / 2, bullet.y, '#ffffff'));
-                        const destroyed = enemy.hit();
-                        if (destroyed) {
-                            explosions.push(new Explosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, enemy.color));
-                        }
-                        break;
-                    }
-                }
-            }
-            if (!player.invulnerable) {
-                for (let i = 0; i < enemyBullets.length; i++) {
-                    const bullet = enemyBullets[i];
-                    if (
-                        bullet.x < player.x + player.width &&
-                        bullet.x + bullet.width > player.x &&
-                        bullet.y < player.y + player.height &&
-                        bullet.y + bullet.height > player.y
-                    ) {
-                        enemyBulletsToRemove.add(i);
-                        explosions.push(new Explosion(bullet.x + bullet.width / 2, bullet.y + bullet.height / 2, '#ff0000'));
-                        player.hit();
-                    }
-                }
-            }
-            const bulletIndices = Array.from(bulletsToRemove).sort((a, b) => b - a);
-            for (const idx of bulletIndices) bullets.splice(idx, 1);
-            const enemyBulletIndices = Array.from(enemyBulletsToRemove).sort((a, b) => b - a);
-            for (const idx of enemyBulletIndices) enemyBullets.splice(idx, 1);
-        }
-        
-        function updateGameObjects() {
-            player.update();
-            const bulletsToRemove = [];
-            const enemiesToRemove = [];
-            const enemyBulletsToRemove = [];
-            const explosionsToRemove = [];
-            for (let i = 0; i < bullets.length; i++) {
-                bullets[i].update();
-                if (bullets[i].y < 0) bulletsToRemove.push(i);
-            }
-            let gameOverTriggered = false;
-            for (let i = 0; i < enemies.length; i++) {
-                const alive = enemies[i].update();
-                if (!alive) enemiesToRemove.push(i);
-                if (!enemies[i].sinking && enemies[i].y + enemies[i].height > player.y) gameOverTriggered = true;
-            }
-            if (gameOverTriggered) {
-                gameOver();
-                return;
-            }
-            for (let i = 0; i < enemyBullets.length; i++) {
-                enemyBullets[i].update();
-                if (enemyBullets[i].y > canvas.height) enemyBulletsToRemove.push(i);
-            }
-            for (let i = 0; i < explosions.length; i++) {
-                const alive = explosions[i].update();
-                if (!alive) explosionsToRemove.push(i);
-            }
-            for (let i = bulletsToRemove.length - 1; i >= 0; i--) bullets.splice(bulletsToRemove[i], 1);
-            for (let i = enemiesToRemove.length - 1; i >= 0; i--) enemies.splice(enemiesToRemove[i], 1);
-            for (let i = enemyBulletsToRemove.length - 1; i >= 0; i--) enemyBullets.splice(enemyBulletsToRemove[i], 1);
-            for (let i = explosionsToRemove.length - 1; i >= 0; i--) explosions.splice(explosionsToRemove[i], 1);
-            if (enemies.length === 0) {
-                wave++;
-                let waveBonus = wave <= 3 ? 50 * wave : wave <= 5 ? 100 * wave : 200 * wave;
-                score += waveBonus;
-                scoreDisplay.textContent = `Score: ${score}`;
-                createEnemies();
-            }
-            if (Date.now() - lastUpdateTime > 5000) {
-                updateServer('heartbeat');
-                lastUpdateTime = Date.now();
-            }
-        }
-        
-        function drawGameObjects() {
-            ctx.fillStyle = '#1e3d59';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            drawStars();
-            player.draw();
-            bullets.forEach(bullet => bullet.draw());
-            enemies.forEach(enemy => enemy.draw());
-            enemyBullets.forEach(bullet => bullet.draw());
-            explosions.forEach(explosion => explosion.draw());
-            if (gamePaused) {
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.fillStyle = 'white';
-                ctx.font = '36px Arial';
+                ctx.font = '12px Arial';
                 ctx.textAlign = 'center';
-                ctx.fillText('PAUSED', canvas.width / 2, canvas.height / 2);
+                ctx.fillText(this.health, 0, 5);
                 ctx.textAlign = 'left';
             }
+            ctx.restore();
         }
         
-        function drawStars() {
-            const starCount = 100;
-            ctx.fillStyle = 'white';
-            for (let i = 0; i < starCount; i++) {
-                const x = Math.sin(i * 573.1) * canvas.width/2 + canvas.width/2;
-                const y = Math.cos(i * 723.9) * canvas.height/2 + canvas.height/2;
-                const brightness = 0.3 + Math.sin(Date.now() * 0.001 + i) * 0.2;
-                ctx.globalAlpha = brightness;
+        update() {
+            if (this.sinking) {
+                this.y += this.sinkSpeed;
+                this.rotation = Math.min(this.maxRotation, this.rotation + 0.03);
+                return this.y < canvas.height + 100;
+            } else {
+                this.x += this.speed * this.direction;
+                if (this.x <= 0 || this.x + this.width >= canvas.width) this.direction *= -1;
+                if (Math.random() < this.shootRate) this.shoot();
+                return true;
+            }
+        }
+        
+        shoot() {
+            enemyBullets.push(new EnemyBullet(this.x + this.width / 2 - 2, this.y + this.height));
+        }
+        
+        hit() {
+            this.health--;
+            if (this.health <= 0) {
+                this.sinking = true;
+                score += this.points;
+                scoreDisplay.textContent = `Score: ${score}`;
+                updateServer('enemy-killed');
+                return true;
+            }
+            return false;
+        }
+    }
+    
+    class Explosion {
+        constructor(x, y, color) {
+            this.x = x;
+            this.y = y;
+            this.radius = 5;
+            this.maxRadius = 30;
+            this.color = color;
+            this.alpha = 1;
+            this.expandSpeed = 1.5;
+            this.fadeSpeed = 0.05;
+            this.particles = [];
+            const particleCount = 12 + Math.floor(Math.random() * 8);
+            for (let i = 0; i < particleCount; i++) {
+                const angle = (i / particleCount) * Math.PI * 2;
+                const speed = 1 + Math.random() * 2;
+                this.particles.push({
+                    x: this.x,
+                    y: this.y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    radius: 1 + Math.random() * 3,
+                    alpha: 1
+                });
+            }
+        }
+        
+        draw() {
+            ctx.globalAlpha = this.alpha;
+            ctx.fillStyle = this.color;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fill();
+            for (const particle of this.particles) {
+                ctx.globalAlpha = particle.alpha;
+                ctx.fillStyle = this.color;
                 ctx.beginPath();
-                ctx.arc(x, y, 1, 0, Math.PI * 2);
+                ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
                 ctx.fill();
             }
             ctx.globalAlpha = 1;
         }
         
-        async function updateServer(eventType) {
-            try {
-                await fetch(`${BASE_URL}/update-game`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': gameToken },
-                    body: JSON.stringify({ sessionId, eventType, wave, score, lives, moveCount })
-                });
-            } catch (error) {
-                console.error('Server update failed:', error.message);
+        update() {
+            this.radius += this.expandSpeed;
+            this.alpha -= this.fadeSpeed;
+            for (const particle of this.particles) {
+                particle.x += particle.vx;
+                particle.y += particle.vy;
+                particle.alpha -= 0.02;
+            }
+            return this.alpha > 0 && this.radius < this.maxRadius;
+        }
+    }
+    
+    function createEnemies() {
+        enemies = enemies.filter(enemy => !enemy.sinking);
+        if (wave > FINAL_WAVE) {
+            victory();
+            return;
+        }
+        let difficultyMultiplier = wave <= 3 ? 1.0 + (wave * 0.15) : wave <= 5 ? 1.2 + ((wave - 3) * 0.15) : 1.6 + ((wave - 5) * 0.2);
+        waveDisplay.textContent = `Wave: ${wave}/${FINAL_WAVE}`;
+        let rows = wave <= 3 ? 4 : wave <= 5 ? 4 : Math.min(5, 4 + Math.floor((wave - 5) / 2));
+        const cols = wave <= 3 ? 9 : wave <= 5 ? 8 : Math.min(10, 8 + Math.floor((wave - 5) / 2));
+        const totalWidth = canvas.width * 0.85;
+        const xMargin = (canvas.width - totalWidth) / 2;
+        const colSpacing = totalWidth / (cols - 1);
+        const yStart = 60;
+        const rowSpacing = 60;
+        for (let row = 0; row < rows; row++) {
+            for (let col = 0; col < cols; col++) {
+                const size = 40 - (row * 5);
+                const colors = ['#ff0000', '#ff6600', '#ff9900', '#ffcc00', '#ffee00'];
+                let health = wave <= 3 ? (row === 0 ? 1 + wave : row === 1 ? 1 + Math.floor(wave / 2) : row === 2 && wave >= 2 ? 2 : 1) :
+                             wave <= 5 ? (row === 0 ? 2 + Math.floor((wave - 3) / 2) : row === 1 ? 2 : row === 2 && wave >= 5 ? 2 : 1) :
+                             (row === 0 ? Math.min(5, 3 + Math.floor((wave - 5) / 2)) : row === 1 ? Math.min(4, 2 + Math.floor((wave - 5) / 2)) : row === 2 ? Math.min(3, 1 + Math.floor((wave - 5) / 2)) : 1 + Math.floor((wave - 8) / 2));
+                const points = 10 * (rows - row) * health * (1 + (wave * 0.1));
+                const speed = (wave <= 3 ? 0.7 + (row * 0.2) : 0.7 + (row * 0.15)) * difficultyMultiplier;
+                const shootRate = (wave <= 3 ? 0.0006 : 0.0004) * difficultyMultiplier * (1 + (row * 0.3));
+                const xPos = xMargin + (col * colSpacing) - (size / 2);
+                const yPos = yStart + (row * rowSpacing);
+                enemies.push(new Enemy(xPos, yPos, size, colors[row % colors.length], health, points, speed, shootRate));
             }
         }
-        
-        function gameLoop(timestamp) {
-            if (!gameActive) return;
-            if (!lastTime) lastTime = timestamp;
-            const deltaTime = (timestamp - lastTime) / 1000;
-            lastTime = timestamp;
-            if (!gamePaused) {
-                updateGameObjects();
-                checkCollisions();
-                if (Date.now() - lastMoveTime > 5000 && moveCount < 10) {
-                    gameOver();
-                    alert("Inactivity detected, game ended!");
+        updateServer('wave-start');
+        if (wave > 3) drawWaveMessage();
+    }
+    
+    function drawWaveMessage() {
+        const overlay = document.createElement('div');
+        overlay.style.position = 'absolute';
+        overlay.style.left = '0';
+        overlay.style.top = '0';
+        overlay.style.width = '100%';
+        overlay.style.height = '100%';
+        overlay.style.display = 'flex';
+        overlay.style.alignItems = 'center';
+        overlay.style.justifyContent = 'center';
+        overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+        overlay.style.zIndex = '30';
+        overlay.style.transition = 'opacity 1s';
+        const messageBox = document.createElement('div');
+        messageBox.style.textAlign = 'center';
+        let waveTitle = wave === FINAL_WAVE ? "FINAL WAVE" : `WAVE ${wave}`;
+        let waveMessage = wave === FINAL_WAVE ? "Defeat the lobster commander!" : wave <= 5 ? "The lobsters are getting stronger!" : "Elite forces have arrived!";
+        messageBox.innerHTML = `
+            <h1 style="color: #f0a500; font-size: 48px; margin-bottom: 10px;">${waveTitle}</h1>
+            <p style="color: white; font-size: 24px;">${waveMessage}</p>
+        `;
+        overlay.appendChild(messageBox);
+        document.getElementById('game-container').appendChild(overlay);
+        gamePaused = true;
+        setTimeout(() => {
+            overlay.style.opacity = '0';
+            setTimeout(() => {
+                document.getElementById('game-container').removeChild(overlay);
+                gamePaused = false;
+            }, 1000);
+        }, 2000);
+    }
+    
+    function checkCollisions() {
+        const bulletsToRemove = new Set();
+        const enemyBulletsToRemove = new Set();
+        for (let i = 0; i < bullets.length; i++) {
+            if (bulletsToRemove.has(i)) continue;
+            const bullet = bullets[i];
+            let bulletHit = false;
+            for (let j = 0; j < enemies.length; j++) {
+                const enemy = enemies[j];
+                if (enemy.sinking) continue;
+                if (
+                    bullet.x < enemy.x + enemy.width &&
+                    bullet.x + bullet.width > enemy.x &&
+                    bullet.y < enemy.y + enemy.height &&
+                    bullet.y + bullet.height > enemy.y
+                ) {
+                    bulletsToRemove.add(i);
+                    bulletHit = true;
+                    explosions.push(new Explosion(bullet.x + bullet.width / 2, bullet.y, '#ffffff'));
+                    const destroyed = enemy.hit();
+                    if (destroyed) {
+                        explosions.push(new Explosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, enemy.color));
+                    }
+                    break;
                 }
             }
-            drawGameObjects();
-            animationId = requestAnimationFrame(gameLoop);
         }
-        
-        async function startGame() {
-            score = 0;
-            lives = 3;
-            wave = 1;
-            bullets = [];
-            enemyBullets = [];
-            explosions = [];
-            lastTime = 0;
-            moveCount = 0;
-            lastMoveTime = Date.now();
-            lastUpdateTime = Date.now();
-            player = new Player();
-            createEnemies();
+        if (!player.invulnerable) {
+            for (let i = 0; i < enemyBullets.length; i++) {
+                const bullet = enemyBullets[i];
+                if (
+                    bullet.x < player.x + player.width &&
+                    bullet.x + bullet.width > player.x &&
+                    bullet.y < player.y + player.height &&
+                    bullet.y + bullet.height > player.y
+                ) {
+                    enemyBulletsToRemove.add(i);
+                    explosions.push(new Explosion(bullet.x + bullet.width / 2, bullet.y + bullet.height / 2, '#ff0000'));
+                    player.hit();
+                }
+            }
+        }
+        const bulletIndices = Array.from(bulletsToRemove).sort((a, b) => b - a);
+        for (const idx of bulletIndices) bullets.splice(idx, 1);
+        const enemyBulletIndices = Array.from(enemyBulletsToRemove).sort((a, b) => b - a);
+        for (const idx of enemyBulletIndices) enemyBullets.splice(idx, 1);
+    }
+    
+    function updateGameObjects() {
+        player.update();
+        const bulletsToRemove = [];
+        const enemiesToRemove = [];
+        const enemyBulletsToRemove = [];
+        const explosionsToRemove = [];
+        for (let i = 0; i < bullets.length; i++) {
+            bullets[i].update();
+            if (bullets[i].y < 0) bulletsToRemove.push(i);
+        }
+        let gameOverTriggered = false;
+        for (let i = 0; i < enemies.length; i++) {
+            const alive = enemies[i].update();
+            if (!alive) enemiesToRemove.push(i);
+            if (!enemies[i].sinking && enemies[i].y + enemies[i].height > player.y) gameOverTriggered = true;
+        }
+        if (gameOverTriggered) {
+            gameOver();
+            return;
+        }
+        for (let i = 0; i < enemyBullets.length; i++) {
+            enemyBullets[i].update();
+            if (enemyBullets[i].y > canvas.height) enemyBulletsToRemove.push(i);
+        }
+        for (let i = 0; i < explosions.length; i++) {
+            const alive = explosions[i].update();
+            if (!alive) explosionsToRemove.push(i);
+        }
+        for (let i = bulletsToRemove.length - 1; i >= 0; i--) bullets.splice(bulletsToRemove[i], 1);
+        for (let i = enemiesToRemove.length - 1; i >= 0; i--) enemies.splice(enemiesToRemove[i], 1);
+        for (let i = enemyBulletsToRemove.length - 1; i >= 0; i--) enemyBullets.splice(enemyBulletsToRemove[i], 1);
+        for (let i = explosionsToRemove.length - 1; i >= 0; i--) explosions.splice(explosionsToRemove[i], 1);
+        if (enemies.length === 0) {
+            wave++;
+            let waveBonus = wave <= 3 ? 50 * wave : wave <= 5 ? 100 * wave : 200 * wave;
+            score += waveBonus;
             scoreDisplay.textContent = `Score: ${score}`;
-            waveDisplay.textContent = `Wave: ${wave}/${FINAL_WAVE}`;
-            livesDisplay.textContent = `Lives: ${lives}`;
-            startScreen.style.display = 'none';
-            gameOverScreen.style.display = 'none';
-            victoryScreen.style.display = 'none';
-            if (isTouchDevice) mobileControls.style.display = 'flex';
-            gameActive = true;
-            gamePaused = false;
-            requestAnimationFrame(gameLoop);
+            createEnemies();
         }
-        
-        async function gameOver() {
-            gameActive = false;
-            if (animationId) {
-                cancelAnimationFrame(animationId);
-                animationId = null;
-            }
-            finalScoreDisplay.textContent = `Your score: ${score}`;
-            const reward = wave >= 3 && wave <= 4 ? 0.0025 : wave >= 5 && wave <= 9 ? 0.005 : 0;
-            rewardMessage.textContent = reward > 0 ? `You earned ${reward} SOL for reaching wave ${wave}!` : 'Reach wave 3+ to earn SOL!';
-            gameOverScreen.style.display = 'flex';
-            victoryScreen.style.display = 'none';
-            mobileControls.style.display = 'none';
-            if (reward > 0) await updateServer('game-over');
+        if (Date.now() - lastUpdateTime > 5000) {
+            updateServer('heartbeat');
+            lastUpdateTime = Date.now();
         }
-        
-        async function victory() {
-            gameActive = false;
-            if (animationId) {
-                cancelAnimationFrame(animationId);
-                animationId = null;
-            }
-            victoryScoreDisplay.textContent = `Final Score: ${score}`;
-            victoryRewardMessage.textContent = 'You earned 0.01 SOL for defeating all waves!';
-            victoryScreen.style.display = 'flex';
-            gameOverScreen.style.display = 'none';
-            mobileControls.style.display = 'none';
-            createConfetti();
-            await updateServer('victory');
+    }
+    
+    function drawGameObjects() {
+        ctx.fillStyle = '#1e3d59';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        drawStars();
+        player.draw();
+        bullets.forEach(bullet => bullet.draw());
+        enemies.forEach(enemy => enemy.draw());
+        enemyBullets.forEach(bullet => bullet.draw());
+        explosions.forEach(explosion => explosion.draw());
+        if (gamePaused) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'white';
+            ctx.font = '36px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('PAUSED', canvas.width / 2, canvas.height / 2);
+            ctx.textAlign = 'left';
         }
-        
-        function createConfetti() {
-            const confettiCount = 200;
-            const confettiColors = ['#f0a500', '#4ded30', '#4a90e2', '#ff0000', '#ffcc00', '#ff6600'];
-            const confettiContainer = document.createElement('div');
-            confettiContainer.style.position = 'absolute';
-            confettiContainer.style.width = '100%';
-            confettiContainer.style.height = '100%';
-            confettiContainer.style.overflow = 'hidden';
-            confettiContainer.style.zIndex = '19';
-            confettiContainer.style.pointerEvents = 'none';
-            document.getElementById('game-container').appendChild(confettiContainer);
-            for (let i = 0; i < confettiCount; i++) {
-                const confetti = document.createElement('div');
-                const size = Math.random() * 10 + 5;
-                const color = confettiColors[Math.floor(Math.random() * confettiColors.length)];
-                confetti.style.position = 'absolute';
-                confetti.style.width = `${size}px`;
-                confetti.style.height = `${size}px`;
-                confetti.style.backgroundColor = color;
-                confetti.style.borderRadius = Math.random() > 0.5 ? '50%' : '0';
-                confetti.style.opacity = Math.random() * 0.8 + 0.2;
-                confetti.style.left = `${Math.random() * 100}%`;
-                confetti.style.top = `${-Math.random() * 100}px`;
-                confetti.style.animation = `
-                    fall ${Math.random() * 3 + 2}s linear infinite,
-                    sway ${Math.random() * 4 + 2}s ease-in-out infinite alternate
-                `;
-                confettiContainer.appendChild(confetti);
+    }
+    
+    function drawStars() {
+        const starCount = 100;
+        ctx.fillStyle = 'white';
+        for (let i = 0; i < starCount; i++) {
+            const x = Math.sin(i * 573.1) * canvas.width/2 + canvas.width/2;
+            const y = Math.cos(i * 723.9) * canvas.height/2 + canvas.height/2;
+            const brightness = 0.3 + Math.sin(Date.now() * 0.001 + i) * 0.2;
+            ctx.globalAlpha = brightness;
+            ctx.beginPath();
+            ctx.arc(x, y, 1, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+    }
+    
+    async function updateServer(eventType) {
+        try {
+            const response = await fetch(`${BASE_URL}/update-game`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json', 
+                    'Authorization': `Bearer ${gameToken}` 
+                },
+                body: JSON.stringify({ sessionId, eventType, wave, score, lives, moveCount })
+            });
+            if (!response.ok) {
+                console.error(`Server responded with status: ${response.status}`);
             }
-            const style = document.createElement('style');
-            style.textContent = `
-                @keyframes fall { to { transform: translateY(${canvas.height + 100}px); } }
-                @keyframes sway { from { transform: translateX(-20px) rotate(-${Math.random() * 360}deg); } to { transform: translateX(20px) rotate(${Math.random() * 360}deg); } }
+        } catch (error) {
+            console.error('Server update failed:', error.message);
+        }
+    }
+    
+    function gameLoop(timestamp) {
+        if (!gameActive) return;
+        if (!lastTime) lastTime = timestamp;
+        const deltaTime = (timestamp - lastTime) / 1000;
+        lastTime = timestamp;
+        if (!gamePaused) {
+            updateGameObjects();
+            checkCollisions();
+            if (Date.now() - lastMoveTime > 5000 && moveCount < 10) {
+                gameOver();
+                alert("Inactivity detected, game ended!");
+            }
+        }
+        drawGameObjects();
+        animationId = requestAnimationFrame(gameLoop);
+    }
+    
+    async function startGame() {
+        score = 0;
+        lives = 3;
+        wave = 1;
+        bullets = [];
+        enemyBullets = [];
+        explosions = [];
+        lastTime = 0;
+        moveCount = 0;
+        lastMoveTime = Date.now();
+        lastUpdateTime = Date.now();
+        player = new Player();
+        createEnemies();
+        scoreDisplay.textContent = `Score: ${score}`;
+        waveDisplay.textContent = `Wave: ${wave}/${FINAL_WAVE}`;
+        livesDisplay.textContent = `Lives: ${lives}`;
+        startScreen.style.display = 'none';
+        gameOverScreen.style.display = 'none';
+        victoryScreen.style.display = 'none';
+        if (isTouchDevice) mobileControls.style.display = 'flex';
+        gameActive = true;
+        gamePaused = false;
+        requestAnimationFrame(gameLoop);
+    }
+    
+    async function gameOver() {
+        gameActive = false;
+        if (animationId) {
+            cancelAnimationFrame(animationId);
+            animationId = null;
+        }
+        finalScoreDisplay.textContent = `Your score: ${score}`;
+        const reward = wave >= 3 && wave <= 4 ? 0.0025 : wave >= 5 && wave <= 9 ? 0.005 : 0;
+        rewardMessage.textContent = reward > 0 ? `You earned ${reward} SOL for reaching wave ${wave}!` : 'Reach wave 3+ to earn SOL!';
+        gameOverScreen.style.display = 'flex';
+        victoryScreen.style.display = 'none';
+        mobileControls.style.display = 'none';
+        if (reward > 0) await updateServer('game-over');
+    }
+    
+    async function victory() {
+        gameActive = false;
+        if (animationId) {
+            cancelAnimationFrame(animationId);
+            animationId = null;
+        }
+        victoryScoreDisplay.textContent = `Final Score: ${score}`;
+        victoryRewardMessage.textContent = 'You earned 0.01 SOL for defeating all waves!';
+        victoryScreen.style.display = 'flex';
+        gameOverScreen.style.display = 'none';
+        mobileControls.style.display = 'none';
+        createConfetti();
+        await updateServer('victory');
+    }
+    
+    function createConfetti() {
+        const confettiCount = 200;
+        const confettiColors = ['#f0a500', '#4ded30', '#4a90e2', '#ff0000', '#ffcc00', '#ff6600'];
+        const confettiContainer = document.createElement('div');
+        confettiContainer.style.position = 'absolute';
+        confettiContainer.style.width = '100%';
+        confettiContainer.style.height = '100%';
+        confettiContainer.style.overflow = 'hidden';
+        confettiContainer.style.zIndex = '19';
+        confettiContainer.style.pointerEvents = 'none';
+        document.getElementById('game-container').appendChild(confettiContainer);
+        for (let i = 0; i < confettiCount; i++) {
+            const confetti = document.createElement('div');
+            const size = Math.random() * 10 + 5;
+            const color = confettiColors[Math.floor(Math.random() * confettiColors.length)];
+            confetti.style.position = 'absolute';
+            confetti.style.width = `${size}px`;
+            confetti.style.height = `${size}px`;
+            confetti.style.backgroundColor = color;
+            confetti.style.borderRadius = Math.random() > 0.5 ? '50%' : '0';
+            confetti.style.opacity = Math.random() * 0.8 + 0.2;
+            confetti.style.left = `${Math.random() * 100}%`;
+            confetti.style.top = `${-Math.random() * 100}px`;
+            confetti.style.animation = `
+                fall ${Math.random() * 3 + 2}s linear infinite,
+                sway ${Math.random() * 4 + 2}s ease-in-out infinite alternate
             `;
-            document.head.appendChild(style);
-            setTimeout(() => {
-                document.getElementById('game-container').removeChild(confettiContainer);
-            }, 10000);
+            confettiContainer.appendChild(confetti);
         }
-        
-        function togglePause() {
-            if (!gameActive) return;
-            gamePaused = !gamePaused;
-            pauseButton.textContent = gamePaused ? "Resume" : "Pause";
-            if (gamePaused) {
-                drawGameObjects();
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.fillStyle = 'white';
-                ctx.font = '36px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText('GAME PAUSED', canvas.width / 2, canvas.height / 2 - 20);
-                ctx.font = '18px Arial';
-                ctx.fillText('Press ESC or Pause to continue', canvas.width / 2, canvas.height / 2 + 20);
-                ctx.textAlign = 'left';
-            } else {
-                lastTime = 0;
-            }
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes fall { to { transform: translateY(${canvas.height + 100}px); } }
+            @keyframes sway { from { transform: translateX(-20px) rotate(-${Math.random() * 360}deg); } to { transform: translateX(20px) rotate(${Math.random() * 360}deg); } }
+        `;
+        document.head.appendChild(style);
+        setTimeout(() => {
+            document.getElementById('game-container').removeChild(confettiContainer);
+        }, 10000);
+    }
+    
+    function togglePause() {
+        if (!gameActive) return;
+        gamePaused = !gamePaused;
+        pauseButton.textContent = gamePaused ? "Resume" : "Pause";
+        if (gamePaused) {
+            drawGameObjects();
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'white';
+            ctx.font = '36px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('GAME PAUSED', canvas.width / 2, canvas.height / 2 - 20);
+            ctx.font = '18px Arial';
+            ctx.fillText('Press ESC or Pause to continue', canvas.width / 2, canvas.height / 2 + 20);
+            ctx.textAlign = 'left';
+        } else {
+            lastTime = 0;
+        }
+    }
+
+    submitAddressButton.addEventListener('click', async () => {
+        const address = solAddressInput.value.trim();
+        faucetError.style.display = 'none';
+
+        if (!address || address.length !== 44 || !/^[1-9A-HJ-NP-Za-km-z]+$/.test(address)) {
+            faucetError.textContent = 'Invalid Solana address!';
+            faucetError.style.display = 'block';
+            return;
         }
 
-        submitAddressButton.addEventListener('click', async () => {
-            const address = solAddressInput.value.trim();
-            faucetError.style.display = 'none';
-
-            if (!address || address.length !== 44 || !/^[1-9A-HJ-NP-Za-km-z]+$/.test(address)) {
-                faucetError.textContent = 'Invalid Solana address!';
+        try {
+            console.log('Submitting address to start game:', address);
+            const response = await fetch(`${BASE_URL}/start-game`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ address })
+            });
+            if (!response.ok) throw new Error(`Server responded with status: ${response.status}`);
+            const result = await response.json();
+            console.log('Start game response:', result);
+            if (!result.success) {
+                faucetError.textContent = result.error;
                 faucetError.style.display = 'block';
                 return;
             }
-
-            try {
-                console.log('Submitting address to start game:', address);
-                const response = await fetch(`${BASE_URL}/start-game`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ address })
-                });
-                if (!response.ok) {
-                    throw new Error(`Server responded with status: ${response.status} - ${response.statusText}`);
-                }
-                const result = await response.json();
-                console.log('Start game response:', result);
-                if (!result.success) {
-                    faucetError.textContent = result.error;
-                    faucetError.style.display = 'block';
-                    return;
-                }
-                playerAddress = address;
-                gameToken = result.token;
-                sessionId = result.sessionId;
-                faucetScreen.style.display = 'none';
-                startScreen.style.display = 'flex';
-            } catch (error) {
-                console.error('Error starting game:', error.message);
-                faucetError.textContent = 'Server error, try again later!';
-                faucetError.style.display = 'block';
-            }
-        });
-
-        startButton.addEventListener('click', startGame);
-        restartButton.addEventListener('click', () => {
-            faucetScreen.style.display = 'flex';
-            gameOverScreen.style.display = 'none';
-            fetchServerStats();
-        });
-        victoryRestartButton.addEventListener('click', () => {
-            faucetScreen.style.display = 'flex';
-            victoryScreen.style.display = 'none';
-            fetchServerStats();
-        });
-        pauseButton.addEventListener('click', togglePause);
-
-        window.addEventListener('keydown', (e) => {
-            if (e.code in keys) {
-                keys[e.code] = true;
-                e.preventDefault();
-            }
-            if (e.code === 'Escape') togglePause();
-        });
-        
-        window.addEventListener('keyup', (e) => {
-            if (e.code in keys) keys[e.code] = false;
-        });
-        
-        if (isTouchDevice) {
-            leftButton.addEventListener('touchstart', () => { keys.ArrowLeft = true; });
-            leftButton.addEventListener('touchend', () => { keys.ArrowLeft = false; });
-            rightButton.addEventListener('touchstart', () => { keys.ArrowRight = true; });
-            rightButton.addEventListener('touchend', () => { keys.ArrowRight = false; });
-            fireButton.addEventListener('touchstart', () => { keys.Space = true; });
-            fireButton.addEventListener('touchend', () => { keys.Space = false; });
+            playerAddress = address;
+            gameToken = result.token;
+            sessionId = result.sessionId;
+            faucetScreen.style.display = 'none';
+            startScreen.style.display = 'flex';
+        } catch (error) {
+            console.error('Error starting game:', error.message);
+            faucetError.textContent = 'Server error, try again later!';
+            faucetError.style.display = 'block';
         }
-        
-        window.addEventListener('blur', () => {
-            if (gameActive && !gamePaused) togglePause();
-        });
-    </script>
+    });
+
+    startButton.addEventListener('click', startGame);
+    restartButton.addEventListener('click', () => {
+        faucetScreen.style.display = 'flex';
+        gameOverScreen.style.display = 'none';
+        fetchServerStats();
+    });
+    victoryRestartButton.addEventListener('click', () => {
+        faucetScreen.style.display = 'flex';
+        victoryScreen.style.display = 'none';
+        fetchServerStats();
+    });
+    pauseButton.addEventListener('click', togglePause);
+
+    window.addEventListener('keydown', (e) => {
+        if (e.code in keys) {
+            keys[e.code] = true;
+            e.preventDefault();
+        }
+        if (e.code === 'Escape') togglePause();
+    });
+    
+    window.addEventListener('keyup', (e) => {
+        if (e.code in keys) keys[e.code] = false;
+    });
+    
+    if (isTouchDevice) {
+        leftButton.addEventListener('touchstart', () => { keys.ArrowLeft = true; });
+        leftButton.addEventListener('touchend', () => { keys.ArrowLeft = false; });
+        rightButton.addEventListener('touchstart', () => { keys.ArrowRight = true; });
+        rightButton.addEventListener('touchend', () => { keys.ArrowRight = false; });
+        fireButton.addEventListener('touchstart', () => { keys.Space = true; });
+        fireButton.addEventListener('touchend', () => { keys.Space = false; });
+    }
+    
+    window.addEventListener('blur', () => {
+        if (gameActive && !gamePaused) togglePause();
+    });
+</script>
 </body>
 </html>
