@@ -284,19 +284,23 @@
         // Fetch server balance and total payouts on load
         async function fetchServerStats() {
             try {
-                const response = await fetch(`${BASE_URL}/server-stats`);
+                console.log('Fetching server stats from', `${BASE_URL}/server-stats`);
+                const response = await fetch(`${BASE_URL}/server-stats`, { method: 'GET' });
+                if (!response.ok) {
+                    throw new Error(`Server responded with status: ${response.status} - ${response.statusText}`);
+                }
                 const data = await response.json();
+                console.log('Server stats response:', data);
                 if (data.success) {
                     serverBalanceDisplay.textContent = `Server Balance: ${data.balance.toFixed(4)} SOL`;
                     totalPayoutsDisplay.textContent = `Total Payouts: ${data.totalPayouts.toFixed(4)} SOL`;
                 } else {
-                    serverBalanceDisplay.textContent = 'Server Balance: Error';
-                    totalPayoutsDisplay.textContent = 'Total Payouts: Error';
+                    throw new Error(`Server returned failure: ${data.error || 'Unknown error'}`);
                 }
             } catch (error) {
+                console.error('Failed to fetch server stats:', error.message);
                 serverBalanceDisplay.textContent = 'Server Balance: Error';
                 totalPayoutsDisplay.textContent = 'Total Payouts: Error';
-                console.error('Failed to fetch server stats:', error);
             }
         }
         fetchServerStats();
@@ -840,7 +844,7 @@
                     body: JSON.stringify({ sessionId, eventType, wave, score, lives, moveCount })
                 });
             } catch (error) {
-                console.error('Server update failed:', error);
+                console.error('Server update failed:', error.message);
             }
         }
         
@@ -987,12 +991,17 @@
             }
 
             try {
+                console.log('Submitting address to start game:', address);
                 const response = await fetch(`${BASE_URL}/start-game`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ address })
                 });
+                if (!response.ok) {
+                    throw new Error(`Server responded with status: ${response.status} - ${response.statusText}`);
+                }
                 const result = await response.json();
+                console.log('Start game response:', result);
                 if (!result.success) {
                     faucetError.textContent = result.error;
                     faucetError.style.display = 'block';
@@ -1004,6 +1013,7 @@
                 faucetScreen.style.display = 'none';
                 startScreen.style.display = 'flex';
             } catch (error) {
+                console.error('Error starting game:', error.message);
                 faucetError.textContent = 'Server error, try again later!';
                 faucetError.style.display = 'block';
             }
