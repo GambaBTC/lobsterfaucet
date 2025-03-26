@@ -163,6 +163,12 @@
         #victory-screen h1 { color: #4ded30; }
         #victory-score { color: gold; font-size: 30px; margin: 20px 0; text-shadow: 0 0 5px rgba(255, 215, 0, 0.7); }
         #faucet-error { color: #ff3300; display: none; font-size: 20px; margin-top: 20px; }
+        #server-balance, #total-payouts {
+            color: #4ded30;
+            font-size: 20px;
+            margin: 10px 0;
+            text-shadow: 0 0 5px rgba(77, 237, 48, 0.7);
+        }
         @keyframes fadeIn {
             from { opacity: 0; }
             to { opacity: 1; }
@@ -180,10 +186,12 @@
         <div id="faucet-screen">
             <h1>LOBSTER INVADERS FAUCET</h1>
             <p>Enter your Solana address to earn SOL!<br>(One play per address/IP per 24 hours)</p>
+            <div id="server-balance">Server Balance: Loading...</div>
+            <div id="total-payouts">Total Payouts: Loading...</div>
             <input type="text" id="sol-address-input" placeholder="Your Solana Address">
             <div class="h-captcha" data-sitekey="your-hcaptcha-sitekey"></div>
             <div id="ad-container">
-                <p>Your AD here - <a href="https://x.com/example" target="_blank">@Example</a></p>
+                <p>Follow me on X - <a href="https://x.com/LobsterDev" target="_blank">@LobsterDev</a></p>
             </div>
             <button id="submit-address-button">SUBMIT & PLAY</button>
             <p id="faucet-error"></p>
@@ -243,6 +251,8 @@
         const leftButton = document.getElementById('left-button');
         const rightButton = document.getElementById('right-button');
         const fireButton = document.getElementById('fire-button');
+        const serverBalanceDisplay = document.getElementById('server-balance');
+        const totalPayoutsDisplay = document.getElementById('total-payouts');
         
         canvas.width = 800;
         canvas.height = 600;
@@ -272,6 +282,26 @@
         const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
         const BASE_URL = 'https://faucet.solanalobster.com';
+
+        // Fetch server balance and total payouts on load
+        async function fetchServerStats() {
+            try {
+                const response = await fetch(`${BASE_URL}/server-stats`);
+                const data = await response.json();
+                if (data.success) {
+                    serverBalanceDisplay.textContent = `Server Balance: ${data.balance.toFixed(4)} SOL`;
+                    totalPayoutsDisplay.textContent = `Total Payouts: ${data.totalPayouts.toFixed(4)} SOL`;
+                } else {
+                    serverBalanceDisplay.textContent = 'Server Balance: Error';
+                    totalPayoutsDisplay.textContent = 'Total Payouts: Error';
+                }
+            } catch (error) {
+                serverBalanceDisplay.textContent = 'Server Balance: Error';
+                totalPayoutsDisplay.textContent = 'Total Payouts: Error';
+                console.error('Failed to fetch server stats:', error);
+            }
+        }
+        fetchServerStats();
 
         class Player {
             constructor() {
@@ -988,11 +1018,13 @@
             faucetScreen.style.display = 'flex';
             gameOverScreen.style.display = 'none';
             hcaptcha.reset();
+            fetchServerStats();
         });
         victoryRestartButton.addEventListener('click', () => {
             faucetScreen.style.display = 'flex';
             victoryScreen.style.display = 'none';
             hcaptcha.reset();
+            fetchServerStats();
         });
         pauseButton.addEventListener('click', togglePause);
 
