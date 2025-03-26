@@ -28,9 +28,9 @@ const db = new sqlite3.Database('plays.db', sqlite3.OPEN_READWRITE | sqlite3.OPE
     console.log('Connected to SQLite database.');
 });
 
-// Ensure tables are created
+// Ensure tables are created with 'lives' column
 db.serialize(() => {
-    db.run('CREATE TABLE IF NOT EXISTS plays (sessionId TEXT PRIMARY KEY, address TEXT, ip TEXT, timestamp INTEGER, wave INTEGER, score INTEGER, reward REAL, txSignature TEXT)', (err) => {
+    db.run('CREATE TABLE IF NOT EXISTS plays (sessionId TEXT PRIMARY KEY, address TEXT, ip TEXT, timestamp INTEGER, wave INTEGER, score INTEGER, lives INTEGER DEFAULT 3, reward REAL, txSignature TEXT)', (err) => {
         if (err) console.error('Error creating plays table:', err.message);
         else console.log('Plays table created or already exists.');
     });
@@ -42,7 +42,6 @@ db.serialize(() => {
 
 async function checkEligibility(address, ip) {
     return new Promise((resolve, reject) => {
-        // Bypass restrictions for TEST_IP
         if (ip === TEST_IP) {
             console.log(`Bypassing eligibility check for test IP: ${ip}`);
             return resolve(true);
@@ -175,8 +174,8 @@ app.post('/start-game', async (req, res) => {
         }
         const sessionId = `${address}-${Date.now()}`;
         const token = jwt.sign({ address, ip, sessionId }, JWT_SECRET, { expiresIn: '1h' });
-        db.run('INSERT INTO plays (sessionId, address, ip, timestamp, wave, score, reward) VALUES (?, ?, ?, ?, ?, ?, ?)', 
-            [sessionId, address, ip, Date.now(), 1, 0, 0], (err) => {
+        db.run('INSERT INTO plays (sessionId, address, ip, timestamp, wave, score, lives, reward) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', 
+            [sessionId, address, ip, Date.now(), 1, 0, 3, 0], (err) => {
                 if (err) console.error('Database insert error in /start-game:', err.message);
                 else console.log(`New game session started - Session ID: ${sessionId}`);
             });
@@ -189,15 +188,22 @@ app.post('/start-game', async (req, res) => {
 
 app.post('/update-game', async (req, res) => {
     const { sessionId, eventType, wave, score, lives, moveCount } = req.body;
-    const token = req.headers.authorization;
+    const authHeader = req.headers.authorization;
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
     console.log(`Received /update-game request - Session ID: ${sessionId}, Event: ${eventType}`);
 
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        console.error('No or invalid Authorization header in /update-game');
+        return res.status(403).json({ success: false, error: 'Invalid token' });
+    }
+
+    const token = authHeader.split(' ')[1];
+
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         if (decoded.sessionId !== sessionId || decoded.ip !== ip) {
-            console.error('Invalid token in /update-game');
+            console.error('Token mismatch in /update-game');
             return res.status(403).json({ success: false, error: 'Invalid token' });
         }
 
@@ -215,18 +221,16 @@ app.post('/update-game', async (req, res) => {
 
             let reward = 0;
             if (eventType === 'game-over' || eventType === 'victory') {
-                reward = wave === FINAL_WAVE ? 0.01 : wave >= 5 && wave <= 9 ? 0.005 : wave >= 3 && wave <= 4 ? 0.0025 : 0;
+                reward = wave === 10 ? 0.01 : wave >= 5 && wave <= 9 ? 0.005 : wave >= 3 && wave <= 4 ? 0.0025 : 0;
                 if (reward > 0) {
                     const date = new Date().toISOString().split('T')[0];
                     const dailyTotalServer = await getDailyPayoutTotal(date);
 
-                    // Check server-wide limit (bypassed for FAUCET_ADDRESS)
                     if (decoded.address !== FAUCET_ADDRESS && dailyTotalServer + reward > DAILY_PAYOUT_LIMIT_SERVER) {
                         console.error('Server-wide daily payout limit reached');
                         return res.status(403).json({ success: false, error: 'Server-wide daily payout limit reached' });
                     }
 
-                    // Check per-address limit (bypassed for FAUCET_ADDRESS)
                     const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
                     const dailyTotalAddress = await new Promise((resolve, reject) => {
                         db.get('SELECT SUM(reward) as total FROM plays WHERE address = ? AND timestamp > ?', 
