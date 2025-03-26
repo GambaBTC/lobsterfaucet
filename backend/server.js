@@ -4,7 +4,6 @@ const sqlite3 = require('sqlite3').verbose();
 const rateLimit = require('express-rate-limit');
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair } = require('@solana/web3.js');
 const jwt = require('jsonwebtoken');
-const fetch = require('node-fetch');
 const app = express();
 const port = 3000;
 
@@ -15,7 +14,6 @@ app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
 const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
 const faucetKeypair = Keypair.fromSecretKey(Uint8Array.from([/* Your 64-byte private key array */]));
 const FAUCET_ADDRESS = 'GQMVuJCiPuEGm5fBnRYocwACGt8mo97ZYiMfDxbiMkRn';
-const HCAPTCHA_SECRET = 'your-hcaptcha-secret'; // Replace with your hCaptcha secret
 const JWT_SECRET = 'your-secret-key'; // Replace with a strong secret
 const DAILY_PAYOUT_LIMIT = 1; // SOL per day
 
@@ -51,14 +49,6 @@ async function updateDailyPayout(date, amount) {
     db.run('INSERT OR REPLACE INTO daily_payouts (date, total) VALUES (?, ?)', [date, current + amount]);
 }
 
-async function verifyCaptcha(response) {
-    const url = `https://hcaptcha.com/siteverify`;
-    const body = new URLSearchParams({ response, secret: HCAPTCHA_SECRET });
-    const res = await fetch(url, { method: 'POST', body });
-    const data = await res.json();
-    return data.success;
-}
-
 async function sendSol(toAddress, amount) {
     const toPubkey = new PublicKey(toAddress);
     const lamports = amount * 1000000000;
@@ -89,15 +79,11 @@ async function getTotalPayouts() {
 }
 
 app.post('/start-game', async (req, res) => {
-    const { address, captchaResponse } = req.body;
+    const { address } = req.body;
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
     if (!address || address.length !== 44 || !/^[1-9A-HJ-NP-Za-km-z]+$/.test(address)) {
         return res.status(400).json({ success: false, error: 'Invalid Solana address' });
-    }
-
-    if (!(await verifyCaptcha(captchaResponse))) {
-        return res.status(400).json({ success: false, error: 'CAPTCHA verification failed' });
     }
 
     try {
