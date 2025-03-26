@@ -1,9 +1,9 @@
 # Lobster Invaders - Solana Faucet
 
-A Solana faucet game where players earn SOL by playing "Lobster Invaders".
+A Solana faucet game where players earn real SOL on the mainnet by playing "Lobster Invaders".
 
 ## Structure
-- `frontend/main/index.html`: Main landing page for `solanalobster.com`.
+- `frontend/main/index.html`: Landing page for `solanalobster.com`.
 - `frontend/faucet/index.html`: Faucet game for `faucet.solanalobster.com`.
 - `backend/server.js`: Node.js backend for game logic and SOL payouts.
 
