@@ -19,16 +19,16 @@ const JWT_SECRET = 'your-secret-key'; // Replace with a strong secret
 const DAILY_PAYOUT_LIMIT_PER_ADDRESS = 0.01; // 0.01 SOL per address per day
 const DAILY_PAYOUT_LIMIT_SERVER = 1; // 1 SOL total per day for the server
 
-// Initialize SQLite database with error handling
+// Initialize SQLite database
 const db = new sqlite3.Database('plays.db', sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, (err) => {
     if (err) {
         console.error('Failed to open or create SQLite database:', err.message);
-        process.exit(1); // Exit if database connection fails
+        process.exit(1);
     }
     console.log('Connected to SQLite database.');
 });
 
-// Ensure tables are created with 'lives' column
+// Create tables
 db.serialize(() => {
     db.run('CREATE TABLE IF NOT EXISTS plays (sessionId TEXT PRIMARY KEY, address TEXT, ip TEXT, timestamp INTEGER, wave INTEGER, score INTEGER, lives INTEGER DEFAULT 3, reward REAL, txSignature TEXT)', (err) => {
         if (err) console.error('Error creating plays table:', err.message);
@@ -174,6 +174,7 @@ app.post('/start-game', async (req, res) => {
         }
         const sessionId = `${address}-${Date.now()}`;
         const token = jwt.sign({ address, ip, sessionId }, JWT_SECRET, { expiresIn: '1h' });
+        console.log(`Generated token: ${token}`);
         db.run('INSERT INTO plays (sessionId, address, ip, timestamp, wave, score, lives, reward) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', 
             [sessionId, address, ip, Date.now(), 1, 0, 3, 0], (err) => {
                 if (err) console.error('Database insert error in /start-game:', err.message);
@@ -192,6 +193,7 @@ app.post('/update-game', async (req, res) => {
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
     console.log(`Received /update-game request - Session ID: ${sessionId}, Event: ${eventType}`);
+    console.log(`Authorization header received: ${authHeader || 'none'}`);
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         console.error('No or invalid Authorization header in /update-game');
@@ -199,9 +201,9 @@ app.post('/update-game', async (req, res) => {
     }
 
     const token = authHeader.split(' ')[1];
-
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
+        console.log(`Decoded token:`, decoded);
         if (decoded.sessionId !== sessionId || decoded.ip !== ip) {
             console.error('Token mismatch in /update-game');
             return res.status(403).json({ success: false, error: 'Invalid token' });
@@ -221,7 +223,7 @@ app.post('/update-game', async (req, res) => {
 
             let reward = 0;
             if (eventType === 'game-over' || eventType === 'victory') {
-                reward = wave === 10 ? 0.01 : wave >= 5 && wave <= 9 ? 0.005 : wave >= 3 && wave <= 4 ? 0.0025 : 0;
+                reward = wave === FINAL_WAVE ? 0.01 : wave >= 5 && wave <= 9 ? 0.005 : wave >= 3 && wave <= 4 ? 0.0025 : 0;
                 if (reward > 0) {
                     const date = new Date().toISOString().split('T')[0];
                     const dailyTotalServer = await getDailyPayoutTotal(date);
