@@ -39,7 +39,7 @@ const TEST_IP = '148.71.55.160';
 const TEST_ADDRESS = '7MQe73raf4DtyWcAG2sM7wvouZE72BUsxVe65GxRjj2A';
 const JWT_SECRET = process.env.JWT_SECRET || 'default_secret';
 const DAILY_PAYOUT_LIMIT_SERVER = 1;
-const FINAL_WAVE = 10; // Ensure this is defined globally
+const FINAL_WAVE = 10;
 
 const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
 
@@ -236,7 +236,7 @@ app.post('/update-game', async (req, res) => {
 
             if (eventType === 'game-over' || eventType === 'victory') {
                 const cumulativeWaves = wave * (wave + 1) / 2;
-                const maxScore = (750 * cumulativeWaves) + (50 * wave);
+                const maxScore = (1000 * cumulativeWaves) + (100 * wave); // Adjusted to allow higher scores
                 const minMoves = wave * 50;
                 const minDuration = wave * 10;
                 if (
