@@ -28,7 +28,6 @@ app.use((req, res, next) => {
     next();
 });
 
-// Global rate limit: 10000 requests per 15 minutes
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 10000 }));
 
 const secretKeyArray = JSON.parse(fs.readFileSync('/home/faucetuser/lobsterfaucet/backend/faucet_keypair.json', 'utf8'));
@@ -40,7 +39,7 @@ const TEST_IP = '148.71.55.160';
 const TEST_ADDRESS = '7MQe73raf4DtyWcAG2sM7wvouZE72BUsxVe65GxRjj2A';
 const JWT_SECRET = process.env.JWT_SECRET || 'default_secret';
 const DAILY_PAYOUT_LIMIT_SERVER = 1;
-const FINAL_WAVE = 10;
+const FINAL_WAVE = 10; // Ensure this is defined globally
 
 const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
 
@@ -220,8 +219,12 @@ app.post('/update-game', async (req, res) => {
         }
 
         db.get('SELECT wave, score, lives FROM plays WHERE sessionId = ?', [sessionId], async (err, row) => {
-            if (err || !row) {
-                log(`Invalid session: ${err ? err.message : 'No row found'}`);
+            if (err) {
+                log(`Database query error: ${err.message}`);
+                return res.status(500).json({ success: false, error: 'Database error' });
+            }
+            if (!row) {
+                log(`No session found for sessionId: ${sessionId}`);
                 return res.status(400).json({ success: false, error: 'Invalid session' });
             }
 
@@ -232,10 +235,10 @@ app.post('/update-game', async (req, res) => {
             }
 
             if (eventType === 'game-over' || eventType === 'victory') {
-                const cumulativeWaves = wave * (wave + 1) / 2; // Sum of waves up to current
-                const maxScore = (750 * cumulativeWaves) + (50 * wave); // 4650 for wave 3
-                const minMoves = wave * 50; // 150 for wave 3
-                const minDuration = wave * 10; // 30 for wave 3
+                const cumulativeWaves = wave * (wave + 1) / 2;
+                const maxScore = (750 * cumulativeWaves) + (50 * wave);
+                const minMoves = wave * 50;
+                const minDuration = wave * 10;
                 if (
                     wave > FINAL_WAVE + 1 ||
                     score > maxScore ||
