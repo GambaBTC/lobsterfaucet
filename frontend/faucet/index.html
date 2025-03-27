@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lobster Invaders - Solana Faucet</title>
     <style>
+        /* Unchanged CSS from your original */
         body {
             margin: 0;
             padding: 0;
@@ -135,10 +136,10 @@
             transition: background 0.2s;
         }
         .control-button:hover { background: rgba(255, 255, 255, 0.6); }
-        #fire-button { margin-right: auto; } /* Align fire button to the left */
+        #fire-button { margin-right: auto; }
         #arrow-controls {
             display: flex;
-            gap: 10px; /* Space between arrows */
+            gap: 10px;
         }
         #sol-address-input {
             width: 320px;
@@ -279,9 +280,12 @@
         let moveCount = 0;
         let lastUpdateTime = 0;
         let lastServerUpdate = 0;
-        const UPDATE_COOLDOWN = 200;
+        const UPDATE_COOLDOWN = 1000; // Increased to 1 second
         const TARGET_FPS = 60;
         const FIXED_TIME_STEP = 1 / TARGET_FPS;
+        let updateQueue = [];
+        let lastBatchSend = 0;
+        const BATCH_INTERVAL = 1000; // Send updates every 1 second
         
         let player;
         let bullets = [];
@@ -293,21 +297,45 @@
         const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
         const BASE_URL = 'https://faucet.solanalobster.com';
 
+        let lastStatsFetchTime = 0;
+        const STATS_FETCH_INTERVAL = 30000; // 30 seconds
+        let statsCache = { balance: null, totalPayouts: null };
+        let isFetchingStats = false;
+
         async function fetchServerStats() {
+            const now = Date.now();
+            if (isFetchingStats || (now - lastStatsFetchTime < STATS_FETCH_INTERVAL && statsCache.balance !== null)) {
+                serverBalanceDisplay.textContent = `Server Balance: ${statsCache.balance !== null ? statsCache.balance.toFixed(4) : 'Loading...'} SOL`;
+                totalPayoutsDisplay.textContent = `Total Payouts: ${statsCache.totalPayouts !== null ? statsCache.totalPayouts.toFixed(4) : 'Loading...'} SOL`;
+                return;
+            }
+
+            isFetchingStats = true;
             try {
-                console.log('Fetching server stats from', `${BASE_URL}/server-stats`);
                 const response = await fetch(`${BASE_URL}/server-stats`, { method: 'GET' });
-                if (!response.ok) throw new Error(`Server responded with status: ${response.status} - ${response.statusText}`);
+                if (!response.ok) {
+                    if (response.status === 429) {
+                        console.warn('429 Too Many Requests for server-stats, retrying in 5s');
+                        setTimeout(fetchServerStats, 5000);
+                        return;
+                    }
+                    throw new Error(`Server responded with status: ${response.status}`);
+                }
                 const data = await response.json();
-                console.log('Server stats response:', data);
                 if (data.success) {
+                    statsCache.balance = data.balance;
+                    statsCache.totalPayouts = data.totalPayouts;
                     serverBalanceDisplay.textContent = `Server Balance: ${data.balance.toFixed(4)} SOL`;
                     totalPayoutsDisplay.textContent = `Total Payouts: ${data.totalPayouts.toFixed(4)} SOL`;
+                    lastStatsFetchTime = now;
                 } else throw new Error(data.error || 'Unknown error');
             } catch (error) {
                 console.error('Failed to fetch server stats:', error.message);
                 serverBalanceDisplay.textContent = 'Server Balance: Error';
                 totalPayoutsDisplay.textContent = 'Total Payouts: Error';
+                setTimeout(fetchServerStats, 10000);
+            } finally {
+                isFetchingStats = false;
             }
         }
         fetchServerStats();
@@ -318,7 +346,7 @@
                 this.height = 30;
                 this.x = canvas.width / 2 - this.width / 2;
                 this.y = canvas.height - 60;
-                this.speed = 180; // Reduced from 360 to 180 pixels per second
+                this.speed = 150; // Pixels per second
                 this.color = '#4a90e2';
                 this.cooldown = 0;
                 this.maxCooldown = 35;
@@ -387,8 +415,8 @@
             }
             
             shoot() {
-                bullets.push(new Bullet(this.x + this.width / 2 - 2, this.y - 25, 4, 10, '#ffffff', 4));
-                updateServer('shoot');
+                bullets.push(new Bullet(this.x + this.width / 2 - 2, this.y - 25, 4, 10, '#ffffff', 3));
+                queueServerUpdate('shoot');
             }
 
             hit() {
@@ -397,7 +425,7 @@
                     livesDisplay.textContent = `Lives: ${lives}`;
                     this.invulnerable = true;
                     this.invulnerableTime = 0;
-                    updateServer('hit');
+                    queueServerUpdate('hit');
                     if (lives <= 0) gameOver();
                 }
             }
@@ -410,7 +438,7 @@
                 this.width = width;
                 this.height = height;
                 this.color = color;
-                this.speed = speed * 60; // 4 * 60 = 240 pixels per second
+                this.speed = speed * 60; // 180 pixels/second
                 this.trail = [];
                 this.maxTrailLength = 5;
             }
@@ -440,7 +468,7 @@
                 this.width = 4;
                 this.height = 10;
                 this.color = '#ff7700';
-                this.speed = (2 + Math.random() * 1) * 60; // 2-3 * 60
+                this.speed = (2 + Math.random() * 1) * 60;
                 this.trail = [];
                 this.maxTrailLength = 3;
             }
@@ -587,7 +615,7 @@
                     this.sinking = true;
                     score += this.points;
                     scoreDisplay.textContent = `Score: ${score}`;
-                    updateServer('enemy-killed');
+                    queueServerUpdate('enemy-killed');
                     return true;
                 }
                 return false;
@@ -678,7 +706,7 @@
                     enemies.push(new Enemy(xPos, yPos, size, colors[row % colors.length], health, points, speed, shootRate));
                 }
             }
-            updateServer('wave-start');
+            queueServerUpdate('wave-start');
             if (wave > 3) drawWaveMessage();
         }
         
@@ -763,6 +791,45 @@
             for (const idx of enemyBulletIndices) enemyBullets.splice(idx, 1);
         }
         
+        function queueServerUpdate(eventType) {
+            updateQueue.push({ eventType, wave, score, lives, moveCount });
+        }
+
+        async function sendServerUpdateBatch() {
+            if (updateQueue.length === 0) return;
+            const now = Date.now();
+            if (now - lastServerUpdate < UPDATE_COOLDOWN) return;
+
+            lastServerUpdate = now;
+            const batch = [...updateQueue];
+            updateQueue = [];
+            console.log('Sending batch update:', batch);
+
+            try {
+                const response = await fetch(`${BASE_URL}/update-game`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json', 
+                        'Authorization': `Bearer ${gameToken}` 
+                    },
+                    body: JSON.stringify({ sessionId, events: batch })
+                });
+                if (!response.ok) {
+                    console.error(`Server responded with status: ${response.status}`);
+                    if (response.status === 429) {
+                        console.warn('429 Too Many Requests, retrying in 5s');
+                        setTimeout(() => sendServerUpdateBatch(batch), 5000);
+                    }
+                } else {
+                    const result = await response.json();
+                    console.log('Batch update response:', result);
+                }
+            } catch (error) {
+                console.error('Server update failed:', error.message);
+                updateQueue.push(...batch); // Re-queue on failure
+            }
+        }
+
         function updateGameObjects(deltaTime) {
             player.update(deltaTime);
             const bulletsToRemove = [];
@@ -803,8 +870,12 @@
                 createEnemies();
             }
             if (Date.now() - lastUpdateTime > 30000) {
-                updateServer('heartbeat');
+                queueServerUpdate('heartbeat');
                 lastUpdateTime = Date.now();
+            }
+            if (Date.now() - lastBatchSend >= BATCH_INTERVAL) {
+                sendServerUpdateBatch();
+                lastBatchSend = Date.now();
             }
         }
         
@@ -843,40 +914,13 @@
             ctx.globalAlpha = 1;
         }
         
-        async function updateServer(eventType) {
-            const now = Date.now();
-            if (now - lastServerUpdate < UPDATE_COOLDOWN && eventType !== 'game-over' && eventType !== 'victory') {
-                return;
-            }
-            lastServerUpdate = now;
-            console.log('Sending to /update-game - Event:', eventType, 'Token:', gameToken);
-            try {
-                const response = await fetch(`${BASE_URL}/update-game`, {
-                    method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json', 
-                        'Authorization': `Bearer ${gameToken}` 
-                    },
-                    body: JSON.stringify({ sessionId, eventType, wave, score, lives, moveCount })
-                });
-                const result = await response.json();
-                if (!response.ok) {
-                    console.error(`Server responded with status: ${response.status}, Error: ${result.error}`);
-                } else {
-                    console.log(`Update-game response:`, result);
-                }
-            } catch (error) {
-                console.error('Server update failed:', error.message);
-            }
-        }
-        
-        function gameLoop(timestamp) {
+        async function gameLoop(timestamp) {
             if (!gameActive) return;
             if (!lastTime) lastTime = timestamp;
             const elapsed = (timestamp - lastTime) / 1000;
             lastTime = timestamp;
 
-            accumulator += Math.min(elapsed, 0.1); // Cap elapsed to prevent large jumps
+            accumulator += Math.min(elapsed, 0.1);
 
             while (accumulator >= FIXED_TIME_STEP) {
                 if (!gamePaused) {
@@ -891,7 +935,6 @@
             }
 
             drawGameObjects();
-
             animationId = requestAnimationFrame(gameLoop);
         }
         
@@ -908,6 +951,8 @@
             lastMoveTime = Date.now();
             lastUpdateTime = Date.now();
             lastServerUpdate = 0;
+            lastBatchSend = 0;
+            updateQueue = [];
             player = new Player();
             createEnemies();
             scoreDisplay.textContent = `Score: ${score}`;
@@ -934,7 +979,8 @@
             gameOverScreen.style.display = 'flex';
             victoryScreen.style.display = 'none';
             mobileControls.style.display = 'none';
-            if (reward > 0) await updateServer('game-over');
+            if (reward > 0) queueServerUpdate('game-over');
+            await sendServerUpdateBatch();
         }
         
         async function victory() {
@@ -948,8 +994,9 @@
             victoryScreen.style.display = 'flex';
             gameOverScreen.style.display = 'none';
             mobileControls.style.display = 'none';
+            queueServerUpdate('victory');
+            await sendServerUpdateBatch();
             createConfetti();
-            await updateServer('victory');
         }
         
         function createConfetti() {
@@ -1013,13 +1060,20 @@
             }
         }
 
+        let isStartingGame = false;
         submitAddressButton.addEventListener('click', async () => {
+            if (isStartingGame) return;
+            isStartingGame = true;
+            submitAddressButton.disabled = true;
+
             const address = solAddressInput.value.trim();
             faucetError.style.display = 'none';
 
             if (!address || address.length !== 44 || !/^[1-9A-HJ-NP-Za-km-z]+$/.test(address)) {
                 faucetError.textContent = 'Invalid Solana address!';
                 faucetError.style.display = 'block';
+                isStartingGame = false;
+                submitAddressButton.disabled = false;
                 return;
             }
 
@@ -1030,12 +1084,21 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ address })
                 });
-                if (!response.ok) throw new Error(`Server responded with status: ${response.status}`);
+                if (!response.ok) {
+                    if (response.status === 429) {
+                        faucetError.textContent = 'Too many requests, try again in a moment!';
+                        faucetError.style.display = 'block';
+                        setTimeout(() => submitAddressButton.click(), 5000);
+                        return;
+                    }
+                    throw new Error(`Server responded with status: ${response.status}`);
+                }
                 const result = await response.json();
-                console.log('Start game response:', result);
                 if (!result.success) {
                     faucetError.textContent = result.error;
                     faucetError.style.display = 'block';
+                    isStartingGame = false;
+                    submitAddressButton.disabled = false;
                     return;
                 }
                 playerAddress = address;
@@ -1048,6 +1111,9 @@
                 console.error('Error starting game:', error.message);
                 faucetError.textContent = 'Server error, try again later!';
                 faucetError.style.display = 'block';
+            } finally {
+                isStartingGame = false;
+                submitAddressButton.disabled = false;
             }
         });
 
