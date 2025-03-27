@@ -43,7 +43,7 @@
         <div id="score-display">Score: 0</div>
         <div id="wave-display">Wave: 1</div>
         <div id="lives-display">Lives: 3</div>
-        <div id="version-display">v1.0.2</div>
+        <div id="version-display">v1.0.4</div>
         <button id="pause-button">Pause</button>
         
         <div id="faucet-screen">
@@ -135,9 +135,10 @@
         let sessionId = '';
         let lastMoveTime = 0;
         let moveCount = 0;
+        let startTime = 0;
         const TARGET_FPS = 60;
         const FIXED_TIME_STEP = 1 / TARGET_FPS;
-        const VERSION = "v1.0.2";
+        const VERSION = "v1.0.4";
         
         let player;
         let bullets = [];
@@ -198,7 +199,7 @@
                 this.height = 30;
                 this.x = canvas.width / 2 - this.width / 2;
                 this.y = canvas.height - 60;
-                this.speed = 150;
+                this.speed = 300; // Increased from 150
                 this.color = '#4a90e2';
                 this.cooldown = 0;
                 this.maxCooldown = 35;
@@ -267,7 +268,7 @@
             }
             
             shoot() {
-                bullets.push(new Bullet(this.x + this.width / 2 - 2, this.y - 25, 4, 10, '#ffffff', 3));
+                bullets.push(new Bullet(this.x + this.width / 2 - 2, this.y - 25, 4, 10, '#ffffff', 6));
             }
 
             hit() {
@@ -288,7 +289,7 @@
                 this.width = width;
                 this.height = height;
                 this.color = color;
-                this.speed = speed * 60;
+                this.speed = speed * 60; // Now 6 * 60
                 this.trail = [];
                 this.maxTrailLength = 5;
             }
@@ -548,7 +549,7 @@
                                  wave <= 5 ? (row === 0 ? 2 + Math.floor((wave - 3) / 2) : row === 1 ? 2 : row === 2 && wave >= 5 ? 2 : 1) :
                                  (row === 0 ? Math.min(5, 3 + Math.floor((wave - 5) / 2)) : row === 1 ? Math.min(4, 2 + Math.floor((wave - 5) / 2)) : row === 2 ? Math.min(3, 1 + Math.floor((wave - 5) / 2)) : 1 + Math.floor((wave - 8) / 2));
                     const points = 10 * (rows - row) * health * (1 + (wave * 0.1));
-                    const speed = (wave <= 3 ? 0.35 + (row * 0.1) : 0.35 + (row * 0.075)) * difficultyMultiplier;
+                    const speed = (wave <= 3 ? 0.7 + (row * 0.2) : 0.7 + (row * 0.15)) * difficultyMultiplier; // Increased from 0.35
                     const shootRate = (wave <= 3 ? 0.0003 : 0.0002) * difficultyMultiplier * (1 + (row * 0.3));
                     const xPos = xMargin + (col * colSpacing) - (size / 2);
                     const yPos = yStart + (row * rowSpacing);
@@ -639,30 +640,40 @@
             for (const idx of enemyBulletIndices) enemyBullets.splice(idx, 1);
         }
         
-        async function sendFinalUpdate(eventType) {
+        async function sendFinalUpdate(eventType, gameDuration) {
             console.log(`Sending /update-game: ${eventType}`);
-            try {
-                const response = await fetch(`${BASE_URL}/update-game`, {
-                    method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json', 
-                        'Authorization': `Bearer ${gameToken}` 
-                    },
-                    body: JSON.stringify({ sessionId, eventType, wave, score, lives, moveCount })
-                });
-                if (!response.ok) {
-                    if (response.status === 429) {
-                        console.warn('429 Too Many Requests, retrying in 5s');
-                        setTimeout(() => sendFinalUpdate(eventType), 5000);
-                        return;
+            let retries = 3;
+            while (retries > 0) {
+                try {
+                    const response = await fetch(`${BASE_URL}/update-game`, {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json', 
+                            'Authorization': `Bearer ${gameToken}` 
+                        },
+                        body: JSON.stringify({ sessionId, eventType, wave, score, lives, moveCount, gameDuration })
+                    });
+                    if (!response.ok) {
+                        if (response.status === 429) {
+                            console.warn('429 Too Many Requests, retrying in 5s');
+                            await new Promise(resolve => setTimeout(resolve, 5000));
+                            retries--;
+                            continue;
+                        }
+                        throw new Error(`Server error: ${response.status}`);
                     }
-                    throw new Error(`Server error: ${response.status}`);
+                    const result = await response.json();
+                    console.log('Server response:', result);
+                    break;
+                } catch (error) {
+                    console.error('Update failed:', error.message);
+                    if (retries > 0) {
+                        await new Promise(resolve => setTimeout(resolve, 10000));
+                        retries--;
+                    } else {
+                        console.error('Max retries reached');
+                    }
                 }
-                const result = await response.json();
-                console.log('Final update response:', result);
-            } catch (error) {
-                console.error('Final update failed:', error.message);
-                setTimeout(() => sendFinalUpdate(eventType), 10000);
             }
         }
 
@@ -777,6 +788,7 @@
             accumulator = 0;
             moveCount = 0;
             lastMoveTime = Date.now();
+            startTime = Date.now();
             player = new Player();
             createEnemies();
             scoreDisplay.textContent = `Score: ${score}`;
@@ -804,7 +816,10 @@
             gameOverScreen.style.display = 'flex';
             victoryScreen.style.display = 'none';
             mobileControls.style.display = 'none';
-            if (reward > 0) await sendFinalUpdate('game-over');
+            if (reward > 0) {
+                const gameDuration = Math.floor((Date.now() - startTime) / 1000);
+                await sendFinalUpdate('game-over', gameDuration);
+            }
         }
         
         async function victory() {
@@ -818,7 +833,8 @@
             victoryScreen.style.display = 'flex';
             gameOverScreen.style.display = 'none';
             mobileControls.style.display = 'none';
-            await sendFinalUpdate('victory');
+            const gameDuration = Math.floor((Date.now() - startTime) / 1000);
+            await sendFinalUpdate('victory', gameDuration);
             createConfetti();
         }
         
