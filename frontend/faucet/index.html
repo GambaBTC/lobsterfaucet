@@ -43,7 +43,7 @@
         <div id="score-display">Score: 0</div>
         <div id="wave-display">Wave: 1</div>
         <div id="lives-display">Lives: 3</div>
-        <div id="version-display">v1.0.5</div>
+        <div id="version-display">v1.0.6</div>
         <button id="pause-button">Pause</button>
         
         <div id="faucet-screen">
@@ -138,7 +138,7 @@
         let startTime = 0;
         const TARGET_FPS = 60;
         const FIXED_TIME_STEP = 1 / TARGET_FPS;
-        const VERSION = "v1.0.5";
+        const VERSION = "v1.0.6";
         const SPEED_MULTIPLIER = 2; // Doubles game speed
         
         let player;
@@ -155,6 +155,7 @@
         const STATS_FETCH_INTERVAL = 30000;
         let statsCache = { balance: null, totalPayouts: null };
         let isFetchingStats = false;
+        let isSendingUpdate = false;
 
         async function fetchServerStats() {
             const now = Date.now();
@@ -533,6 +534,7 @@
                 victory();
                 return;
             }
+            moveCount = 0; // Reset moveCount per wave
             let difficultyMultiplier = wave <= 3 ? 1.0 + (wave * 0.15) : wave <= 5 ? 1.2 + ((wave - 3) * 0.15) : 1.6 + ((wave - 5) * 0.2);
             waveDisplay.textContent = `Wave: ${wave}/${FINAL_WAVE}`;
             let rows = wave <= 3 ? 4 : wave <= 5 ? 4 : Math.min(5, 4 + Math.floor((wave - 5) / 2));
@@ -642,7 +644,9 @@
         }
         
         async function sendFinalUpdate(eventType, gameDuration) {
-            console.log(`Sending /update-game: ${eventType}`);
+            if (isSendingUpdate) return;
+            isSendingUpdate = true;
+            console.log(`Sending /update-game: ${eventType}, Wave: ${wave}, Score: ${score}, Lives: ${lives}, MoveCount: ${moveCount}, Duration: ${gameDuration}`);
             let retries = 3;
             while (retries > 0) {
                 try {
@@ -676,6 +680,7 @@
                     }
                 }
             }
+            isSendingUpdate = false;
         }
 
         function updateGameObjects(deltaTime) {
@@ -766,7 +771,7 @@
                 if (!gamePaused) {
                     updateGameObjects(FIXED_TIME_STEP);
                     checkCollisions();
-                    if (Date.now() - lastMoveTime > 5000 && moveCount < 10) {
+                    if (Date.now() - lastMoveTime > 15000 && moveCount < 20) {
                         gameOver();
                         alert("Inactivity detected, game ended!");
                     }
@@ -788,7 +793,7 @@
             lastTime = 0;
             accumulator = 0;
             moveCount = 0;
-            lastMoveTime = Date.now();
+            lastMoveTime = Date.now() + 5000; // 5-second grace period
             startTime = Date.now();
             player = new Player();
             createEnemies();
@@ -802,6 +807,7 @@
             if (isTouchDevice) mobileControls.style.display = 'flex';
             gameActive = true;
             gamePaused = false;
+            console.log('Game started - Initial MoveCount:', moveCount, 'StartTime:', startTime);
             requestAnimationFrame(gameLoop);
         }
         
@@ -812,7 +818,7 @@
                 animationId = null;
             }
             finalScoreDisplay.textContent = `Your score: ${score}`;
-            const reward = wave >= 1 && wave <= 3 ? 0.001 : wave >= 4 && wave <= 9 ? 0.0025 : 0;
+            const reward = wave === FINAL_WAVE ? 0.005 : wave >= 4 && wave <= 9 ? 0.0025 : wave >= 1 && wave <= 3 ? 0.001 : 0;
             rewardMessage.textContent = reward > 0 ? `You earned ${reward} SOL for reaching wave ${wave}!` : 'Reach wave 1+ to earn SOL!';
             gameOverScreen.style.display = 'flex';
             victoryScreen.style.display = 'none';
@@ -988,4 +994,3 @@
     </script>
 </body>
 </html>
-   
