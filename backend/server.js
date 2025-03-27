@@ -11,6 +11,7 @@ dotenv.config();
 
 const app = express();
 const port = 3000;
+const SERVER_VERSION = 'v1.0.6';
 
 const logStream = fs.createWriteStream('server.log', { flags: 'a' });
 const log = (message) => {
@@ -62,7 +63,6 @@ db.serialize(() => {
 
 async function checkEligibility(address, ip) {
     return new Promise((resolve, reject) => {
-        // Exempt TEST_IP regardless of address for unlimited testing
         if (ip === TEST_IP) {
             log(`Exempting IP ${TEST_IP} for unlimited testing`);
             return resolve(true);
@@ -199,7 +199,7 @@ app.post('/start-game', async (req, res) => {
         const sessionId = `${address}-${Date.now()}`;
         const token = jwt.sign({ address, ip, sessionId }, JWT_SECRET, { expiresIn: '1h' });
         log(`Generated token: ${token}`);
-        db.run('INSERT INTO plays (sessionId, address, ip, timestamp, wave, score, lives, reward) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', 
+        db.run('INSERT OR REPLACE INTO plays (sessionId, address, ip, timestamp, wave, score, lives, reward) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', 
             [sessionId, address, ip, Date.now(), 1, 0, 3, 0], (err) => {
                 if (err) {
                     log(`DB error in /start-game: ${err.message}`);
@@ -247,6 +247,7 @@ app.post('/update-game', async (req, res) => {
             }
 
             const { wave: serverWave, score: serverScore, lives: serverLives } = row;
+            log(`Validated game state - Server Wave: ${serverWave}, Server Score: ${serverScore}, Server Lives: ${serverLives}`);
             if (wave < serverWave || score < serverScore || lives > serverLives) {
                 log('Invalid game state update');
                 return res.status(400).json({ success: false, error: 'Invalid game state update' });
@@ -255,8 +256,8 @@ app.post('/update-game', async (req, res) => {
             if (eventType === 'game-over' || eventType === 'victory') {
                 const cumulativeWaves = wave * (wave + 1) / 2;
                 const maxScore = (1000 * cumulativeWaves) + (100 * wave);
-                const minMoves = wave * 50;
-                const minDuration = wave * 10;
+                const minMoves = wave * 20; // Sync with client
+                const minDuration = wave >= 3 ? 15 : wave * 5; // Sync with client
                 if (
                     wave > FINAL_WAVE + 1 ||
                     score > maxScore ||
@@ -323,4 +324,4 @@ app.get('/server-stats', async (req, res) => {
     }
 });
 
-app.listen(port, () => log(`Server running on port ${port}`));
+app.listen(port, () => log(`Server running on port ${port} - Version ${SERVER_VERSION}`));
