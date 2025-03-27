@@ -199,7 +199,7 @@
                 this.height = 30;
                 this.x = canvas.width / 2 - this.width / 2;
                 this.y = canvas.height - 60;
-                this.speed = 300; // Increased from 150
+                this.speed = 260; // 75% increase from 150
                 this.color = '#4a90e2';
                 this.cooldown = 0;
                 this.maxCooldown = 35;
@@ -268,7 +268,7 @@
             }
             
             shoot() {
-                bullets.push(new Bullet(this.x + this.width / 2 - 2, this.y - 25, 4, 10, '#ffffff', 6));
+                bullets.push(new Bullet(this.x + this.width / 2 - 2, this.y - 25, 4, 10, '#ffffff', 5)); // 75% increase from 3
             }
 
             hit() {
@@ -289,7 +289,7 @@
                 this.width = width;
                 this.height = height;
                 this.color = color;
-                this.speed = speed * 60; // Now 6 * 60
+                this.speed = speed * 60; // Now 5 * 60
                 this.trail = [];
                 this.maxTrailLength = 5;
             }
@@ -549,7 +549,7 @@
                                  wave <= 5 ? (row === 0 ? 2 + Math.floor((wave - 3) / 2) : row === 1 ? 2 : row === 2 && wave >= 5 ? 2 : 1) :
                                  (row === 0 ? Math.min(5, 3 + Math.floor((wave - 5) / 2)) : row === 1 ? Math.min(4, 2 + Math.floor((wave - 5) / 2)) : row === 2 ? Math.min(3, 1 + Math.floor((wave - 5) / 2)) : 1 + Math.floor((wave - 8) / 2));
                     const points = 10 * (rows - row) * health * (1 + (wave * 0.1));
-                    const speed = (wave <= 3 ? 0.7 + (row * 0.2) : 0.7 + (row * 0.15)) * difficultyMultiplier; // Increased from 0.35
+                    const speed = (wave <= 3 ? 0.6 + (row * 0.175) : 0.6 + (row * 0.13125)) * difficultyMultiplier; // 75% increase from 0.35
                     const shootRate = (wave <= 3 ? 0.0003 : 0.0002) * difficultyMultiplier * (1 + (row * 0.3));
                     const xPos = xMargin + (col * colSpacing) - (size / 2);
                     const yPos = yStart + (row * rowSpacing);
