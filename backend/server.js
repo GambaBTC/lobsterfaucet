@@ -23,8 +23,8 @@ console.log('Secret key length:', secretKey.length);
 const faucetKeypair = Keypair.fromSecretKey(secretKey);
 const FAUCET_ADDRESS = faucetKeypair.publicKey.toString();
 const TEST_IP = '148.71.55.160';
+const TEST_ADDRESS = '7MQe73raf4DtyWcAG2sM7wvouZE72BUsxVe65GxRjj2A'; // Your server address
 const JWT_SECRET = process.env.JWT_SECRET;
-const DAILY_PAYOUT_LIMIT_PER_ADDRESS = 0.01; // Not strictly enforced here, just a reference
 const DAILY_PAYOUT_LIMIT_SERVER = 1;
 
 const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
@@ -48,10 +48,12 @@ db.serialize(() => {
 
 async function checkEligibility(address, ip) {
     return new Promise((resolve, reject) => {
-        if (ip === TEST_IP) {
-            console.log(`Bypassing eligibility check for test IP: ${ip}`);
+        // Exempt TEST_ADDRESS and TEST_IP combo from all blocks
+        if (address === TEST_ADDRESS && ip === TEST_IP) {
+            console.log(`Exempting test address ${TEST_ADDRESS} and IP ${TEST_IP} from eligibility checks`);
             return resolve(true);
         }
+
         const now = Date.now();
         const oneDayAgo = now - 24 * 60 * 60 * 1000;
         db.get('SELECT MAX(timestamp) as lastPayoutTime FROM plays WHERE address = ? AND timestamp > ? AND reward > 0', 
