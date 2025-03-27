@@ -69,20 +69,36 @@ async function checkEligibility(address, ip) {
 
         const now = Date.now();
         const oneDayAgo = now - 24 * 60 * 60 * 1000;
+
+        // Check if the address has a recent payout
         db.get('SELECT MAX(timestamp) as lastPayoutTime FROM plays WHERE address = ? AND timestamp > ? AND reward > 0', 
-            [address, oneDayAgo], (err, row) => {
+            [address, oneDayAgo], (err, addressRow) => {
                 if (err) {
-                    log(`Database query error in checkEligibility: ${err.message}`);
+                    log(`Database query error in checkEligibility (address): ${err.message}`);
                     return reject(err);
                 }
-                if (!row || !row.lastPayoutTime) {
-                    log(`No payout found for address: ${address} in last 24 hours - eligible`);
-                    return resolve(true);
-                }
-                const lastPayoutTime = row.lastPayoutTime;
-                const hasRecentPayout = now - lastPayoutTime < 24 * 60 * 60 * 1000;
-                log(`Eligibility check - Address: ${address}, IP: ${ip}, Last payout: ${lastPayoutTime}, Has recent: ${hasRecentPayout}`);
-                resolve(!hasRecentPayout);
+
+                // Check if the IP has a recent payout
+                db.get('SELECT MAX(timestamp) as lastPayoutTime FROM plays WHERE ip = ? AND timestamp > ? AND reward > 0', 
+                    [ip, oneDayAgo], (err, ipRow) => {
+                        if (err) {
+                            log(`Database query error in checkEligibility (IP): ${err.message}`);
+                            return reject(err);
+                        }
+
+                        const addressRecentPayout = addressRow && addressRow.lastPayoutTime;
+                        const ipRecentPayout = ipRow && ipRow.lastPayoutTime;
+
+                        if (!addressRecentPayout && !ipRecentPayout) {
+                            log(`No payout found for address: ${address} or IP: ${ip} in last 24 hours - eligible`);
+                            return resolve(true);
+                        }
+
+                        const hasRecentPayout = (addressRecentPayout && now - addressRecentPayout < 24 * 60 * 60 * 1000) ||
+                                               (ipRecentPayout && now - ipRecentPayout < 24 * 60 * 60 * 1000);
+                        log(`Eligibility check - Address: ${address}, IP: ${ip}, Last address payout: ${addressRecentPayout || 'none'}, Last IP payout: ${ipRecentPayout || 'none'}, Has recent: ${hasRecentPayout}`);
+                        resolve(!hasRecentPayout);
+                    });
             });
     });
 }
@@ -178,8 +194,8 @@ app.post('/start-game', async (req, res) => {
     try {
         const eligible = await checkEligibility(address, ip);
         if (!eligible) {
-            log('Address received a payout within the last 24 hours - ineligible');
-            return res.status(403).json({ success: false, error: 'Address received a payout in the last 24 hours' });
+            log('Address or IP received a payout within the last 24 hours - ineligible');
+            return res.status(403).json({ success: false, error: 'Address or IP received a payout in the last 24 hours' });
         }
         const sessionId = `${address}-${Date.now()}`;
         const token = jwt.sign({ address, ip, sessionId }, JWT_SECRET, { expiresIn: '1h' });
@@ -236,7 +252,7 @@ app.post('/update-game', async (req, res) => {
 
             if (eventType === 'game-over' || eventType === 'victory') {
                 const cumulativeWaves = wave * (wave + 1) / 2;
-                const maxScore = (1000 * cumulativeWaves) + (100 * wave); // Adjusted to allow higher scores
+                const maxScore = (1000 * cumulativeWaves) + (100 * wave);
                 const minMoves = wave * 50;
                 const minDuration = wave * 10;
                 if (
