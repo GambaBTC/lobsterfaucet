@@ -261,7 +261,7 @@
         let lives = 3;
         let wave = 1;
         let lastTime = 0;
-        let accumulator = 0; // For fixed time step
+        let accumulator = 0;
         const FINAL_WAVE = 10;
         let playerAddress = '';
         let gameToken = '';
@@ -270,9 +270,9 @@
         let moveCount = 0;
         let lastUpdateTime = 0;
         let lastServerUpdate = 0;
-        const UPDATE_COOLDOWN = 200; // 200ms cooldown
+        const UPDATE_COOLDOWN = 200;
         const TARGET_FPS = 60;
-        const FIXED_TIME_STEP = 1 / TARGET_FPS; // ~0.01667 seconds (60 FPS)
+        const FIXED_TIME_STEP = 1 / TARGET_FPS;
         
         let player;
         let bullets = [];
@@ -288,7 +288,7 @@
             try {
                 console.log('Fetching server stats from', `${BASE_URL}/server-stats`);
                 const response = await fetch(`${BASE_URL}/server-stats`, { method: 'GET' });
-                if (!response.ok) throw new Error(`Server responded with status: ${response.status}`);
+                if (!response.ok) throw new Error(`Server responded with status: ${response.status} - ${response.statusText}`);
                 const data = await response.json();
                 console.log('Server stats response:', data);
                 if (data.success) {
@@ -309,7 +309,7 @@
                 this.height = 30;
                 this.x = canvas.width / 2 - this.width / 2;
                 this.y = canvas.height - 60;
-                this.speed = 360; // Pixels per second
+                this.speed = 360;
                 this.color = '#4a90e2';
                 this.cooldown = 0;
                 this.maxCooldown = 35;
@@ -363,7 +363,7 @@
                     lastMoveTime = now;
                     moveCount++;
                 }
-                if (this.cooldown > 0) this.cooldown -= deltaTime * 60; // Scale with FPS
+                if (this.cooldown > 0) this.cooldown -= deltaTime * 60;
                 if (keys.Space && this.cooldown <= 0) {
                     this.shoot();
                     this.cooldown = this.maxCooldown;
@@ -401,7 +401,7 @@
                 this.width = width;
                 this.height = height;
                 this.color = color;
-                this.speed = speed * 60; // Pixels per second (8 * 60 = 480)
+                this.speed = speed * 60;
                 this.trail = [];
                 this.maxTrailLength = 5;
             }
@@ -431,7 +431,7 @@
                 this.width = 4;
                 this.height = 10;
                 this.color = '#ff7700';
-                this.speed = (4 + Math.random() * 2) * 60; // Pixels per second
+                this.speed = (4 + Math.random() * 2) * 60;
                 this.trail = [];
                 this.maxTrailLength = 3;
             }
@@ -463,14 +463,14 @@
                 this.color = color;
                 this.health = health;
                 this.points = points;
-                this.speed = speed * 60; // Pixels per second
+                this.speed = speed * 60;
                 this.direction = Math.random() > 0.5 ? 1 : -1;
                 this.shootRate = shootRate;
                 this.animFrame = 0;
                 this.animDelay = 10;
                 this.animCounter = 0;
                 this.sinking = false;
-                this.sinkSpeed = 120; // Pixels per second
+                this.sinkSpeed = 120;
                 this.rotation = 0;
                 this.maxRotation = Math.PI / 6;
             }
@@ -593,13 +593,13 @@
                 this.maxRadius = 30;
                 this.color = color;
                 this.alpha = 1;
-                this.expandSpeed = 90; // Pixels per second
-                this.fadeSpeed = 3; // Alpha per second
+                this.expandSpeed = 90;
+                this.fadeSpeed = 3;
                 this.particles = [];
                 const particleCount = 12 + Math.floor(Math.random() * 8);
                 for (let i = 0; i < particleCount; i++) {
                     const angle = (i / particleCount) * Math.PI * 2;
-                    const speed = (1 + Math.random() * 2) * 60; // Pixels per second
+                    const speed = (1 + Math.random() * 2) * 60;
                     this.particles.push({
                         x: this.x,
                         y: this.y,
@@ -633,7 +633,7 @@
                 for (const particle of this.particles) {
                     particle.x += particle.vx * deltaTime;
                     particle.y += particle.vy * deltaTime;
-                    particle.alpha -= 1.2 * deltaTime; // Adjusted for 60 FPS
+                    particle.alpha -= 1.2 * deltaTime;
                 }
                 return this.alpha > 0 && this.radius < this.maxRadius;
             }
@@ -864,7 +864,7 @@
         function gameLoop(timestamp) {
             if (!gameActive) return;
             if (!lastTime) lastTime = timestamp;
-            const elapsed = (timestamp - lastTime) / 1000; // Convert to seconds
+            const elapsed = (timestamp - lastTime) / 1000;
             lastTime = timestamp;
 
             accumulator += elapsed;
