@@ -12,49 +12,58 @@ dotenv.config();
 const app = express();
 const port = 3000;
 
+// Logging setup
+const logStream = fs.createWriteStream('server.log', { flags: 'a' });
+const log = (message) => {
+    const timestamp = new Date().toISOString();
+    const logMessage = `${timestamp} - ${message}\n`;
+    console.log(logMessage.trim());
+    logStream.write(logMessage);
+};
+
 app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json());
 
-// Global rate limit: 100 requests per 15 minutes
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
+// Global rate limit: 500 requests per 15 minutes
+app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 500 }));
 
-// Custom rate limit for /update-game: 2000 requests per 15 minutes
-const updateGameRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 2000 });
+// Custom rate limit for /update-game: 5000 requests per 15 minutes
+const updateGameRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 5000 });
 
 const secretKeyArray = JSON.parse(fs.readFileSync('/home/faucetuser/lobsterfaucet/backend/faucet_keypair.json', 'utf8'));
 const secretKey = Uint8Array.from(secretKeyArray);
-console.log('Secret key length:', secretKey.length);
+log('Secret key length: ' + secretKey.length);
 const faucetKeypair = Keypair.fromSecretKey(secretKey);
 const FAUCET_ADDRESS = faucetKeypair.publicKey.toString();
 const TEST_IP = '148.71.55.160';
 const TEST_ADDRESS = '7MQe73raf4DtyWcAG2sM7wvouZE72BUsxVe65GxRjj2A';
-const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET || 'default_secret'; // Fallback for testing
 const DAILY_PAYOUT_LIMIT_SERVER = 1;
 
 const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
 
 const db = new sqlite3.Database('plays.db', sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, (err) => {
-    if (err) console.error('Failed to open SQLite database:', err.message);
-    else console.log('Connected to SQLite database.');
+    if (err) log(`Failed to open SQLite database: ${err.message}`);
+    else log('Connected to SQLite database.');
 });
 
 db.serialize(() => {
     db.run('CREATE TABLE IF NOT EXISTS plays (sessionId TEXT PRIMARY KEY, address TEXT, ip TEXT, timestamp INTEGER, wave INTEGER, score INTEGER, lives INTEGER DEFAULT 3, reward REAL, txSignature TEXT)', (err) => {
-        if (err) console.error('Error creating plays table:', err.message);
+        if (err) log(`Error creating plays table: ${err.message}`);
     });
     db.run('CREATE TABLE IF NOT EXISTS daily_payouts (date TEXT, total REAL)', (err) => {
-        if (err) console.error('Error creating daily_payouts table:', err.message);
+        if (err) log(`Error creating daily_payouts table: ${err.message}`);
     });
     db.run('ALTER TABLE plays ADD COLUMN moveCount INTEGER DEFAULT 0', (err) => {
-        if (err && !err.message.includes('duplicate column name')) console.error('Error adding moveCount:', err.message);
+        if (err && !err.message.includes('duplicate column name')) log(`Error adding moveCount: ${err.message}`);
     });
 });
 
 async function checkEligibility(address, ip) {
     return new Promise((resolve, reject) => {
         if (address === TEST_ADDRESS && ip === TEST_IP) {
-            console.log(`Exempting test address ${TEST_ADDRESS} and IP ${TEST_IP} from eligibility checks`);
+            log(`Exempting test address ${TEST_ADDRESS} and IP ${TEST_IP}`);
             return resolve(true);
         }
 
@@ -63,21 +72,17 @@ async function checkEligibility(address, ip) {
         db.get('SELECT MAX(timestamp) as lastPayoutTime FROM plays WHERE address = ? AND timestamp > ? AND reward > 0', 
             [address, oneDayAgo], (err, row) => {
                 if (err) {
-                    console.error('Database query error in checkEligibility:', err.message);
+                    log(`Database query error in checkEligibility: ${err.message}`);
                     return reject(err);
                 }
                 if (!row || !row.lastPayoutTime) {
-                    console.log(`No payout found for address: ${address} in last 24 hours - eligible to play`);
+                    log(`No payout found for address: ${address} in last 24 hours - eligible`);
                     return resolve(true);
                 }
                 const lastPayoutTime = row.lastPayoutTime;
                 const hasRecentPayout = now - lastPayoutTime < 24 * 60 * 60 * 1000;
-                console.log(`Eligibility check - Address: ${address}, IP: ${ip}, Last payout: ${lastPayoutTime}, Has recent payout: ${hasRecentPayout}`);
-                if (hasRecentPayout) {
-                    console.error('Address received a payout within the last 24 hours - ineligible to play');
-                    return resolve(false);
-                }
-                resolve(true);
+                log(`Eligibility check - Address: ${address}, IP: ${ip}, Last payout: ${lastPayoutTime}, Has recent: ${hasRecentPayout}`);
+                resolve(!hasRecentPayout);
             });
     });
 }
@@ -86,11 +91,11 @@ async function getDailyPayoutTotal(date) {
     return new Promise((resolve, reject) => {
         db.get('SELECT total FROM daily_payouts WHERE date = ?', [date], (err, row) => {
             if (err) {
-                console.error('Database query error in getDailyPayoutTotal:', err.message);
+                log(`Database query error in getDailyPayoutTotal: ${err.message}`);
                 return reject(err);
             }
             const total = row ? row.total : 0;
-            console.log(`Server-wide daily payout total for ${date}: ${total} SOL`);
+            log(`Server-wide daily payout total for ${date}: ${total} SOL`);
             resolve(total);
         });
     });
@@ -101,10 +106,10 @@ async function updateDailyPayout(date, amount) {
     return new Promise((resolve, reject) => {
         db.run('INSERT OR REPLACE INTO daily_payouts (date, total) VALUES (?, ?)', [date, current + amount], (err) => {
             if (err) {
-                console.error('Database update error in updateDailyPayout:', err.message);
+                log(`Database update error in updateDailyPayout: ${err.message}`);
                 return reject(err);
             }
-            console.log(`Updated server-wide daily payout for ${date}: ${current + amount} SOL`);
+            log(`Updated daily payout for ${date}: ${current + amount} SOL`);
             resolve();
         });
     });
@@ -121,40 +126,40 @@ async function sendSol(toAddress, amount) {
                 lamports
             })
         );
-        console.log(`Sending ${amount} SOL to ${toAddress}...`);
+        log(`Sending ${amount} SOL to ${toAddress}...`);
         const signature = await connection.sendTransaction(transaction, [faucetKeypair]);
         await connection.confirmTransaction(signature);
-        console.log(`Payout successful - Tx Signature: ${signature}`);
+        log(`Payout successful - Tx Signature: ${signature}`);
         return signature;
     } catch (error) {
-        console.error('Error sending SOL:', error.message);
+        log(`Error sending SOL: ${error.message}`);
         throw error;
     }
 }
 
 async function getServerBalance() {
     try {
-        console.log('Fetching server balance from Solana RPC...');
+        log('Fetching server balance from Solana RPC...');
         const balanceLamports = await connection.getBalance(new PublicKey(FAUCET_ADDRESS));
         const balance = balanceLamports / 1000000000;
-        console.log(`Server balance fetched: ${balance} SOL`);
+        log(`Server balance fetched: ${balance} SOL`);
         return balance;
     } catch (error) {
-        console.error('Error fetching server balance:', error.message);
+        log(`Error fetching server balance: ${error.message}`);
         throw error;
     }
 }
 
 async function getTotalPayouts() {
     return new Promise((resolve, reject) => {
-        console.log('Querying total payouts from database...');
+        log('Querying total payouts from database...');
         db.get('SELECT SUM(reward) as total FROM plays WHERE reward > 0', (err, row) => {
             if (err) {
-                console.error('Database query error in getTotalPayouts:', err.message);
+                log(`Database query error in getTotalPayouts: ${err.message}`);
                 return reject(err);
             }
             const total = row.total || 0;
-            console.log(`Total payouts fetched: ${total} SOL`);
+            log(`Total payouts fetched: ${total} SOL`);
             resolve(total);
         });
     });
@@ -163,127 +168,126 @@ async function getTotalPayouts() {
 app.post('/start-game', async (req, res) => {
     const { address } = req.body;
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-    console.log(`Received /start-game request - Address: ${address}, IP: ${ip}`);
+    log(`Received /start-game request - Address: ${address}, IP: ${ip}`);
 
     if (!address || address.length !== 44 || !/^[1-9A-HJ-NP-Za-km-z]+$/.test(address)) {
-        console.error('Invalid Solana address provided');
+        log('Invalid Solana address provided');
         return res.status(400).json({ success: false, error: 'Invalid Solana address' });
     }
 
     try {
         const eligible = await checkEligibility(address, ip);
         if (!eligible) {
-            console.error('Address received a payout within the last 24 hours - ineligible');
+            log('Address received a payout within the last 24 hours - ineligible');
             return res.status(403).json({ success: false, error: 'Address received a payout in the last 24 hours' });
         }
         const sessionId = `${address}-${Date.now()}`;
         const token = jwt.sign({ address, ip, sessionId }, JWT_SECRET, { expiresIn: '1h' });
-        console.log(`Generated token: ${token}`);
+        log(`Generated token: ${token}`);
         db.run('INSERT INTO plays (sessionId, address, ip, timestamp, wave, score, lives, reward) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', 
             [sessionId, address, ip, Date.now(), 1, 0, 3, 0], (err) => {
-                if (err) console.error('DB error in /start-game:', err.message);
-                else console.log(`New game session started - Session ID: ${sessionId}`);
+                if (err) log(`DB error in /start-game: ${err.message}`);
+                else log(`New game session started - Session ID: ${sessionId}`);
             });
         res.json({ success: true, token, sessionId });
     } catch (error) {
-        console.error('Error in /start-game:', error.message);
+        log(`Error in /start-game: ${error.message}`);
         res.status(500).json({ success: false, error: 'Server error' });
     }
 });
 
 app.post('/update-game', updateGameRateLimit, async (req, res) => {
-    const { sessionId, eventType, wave, score, lives, moveCount } = req.body;
+    const { sessionId, events } = req.body;
     const authHeader = req.headers.authorization;
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
-    console.log(`Received /update-game request - Session ID: ${sessionId}, Event: ${eventType}`);
-    console.log(`Authorization header received: ${authHeader || 'none'}`);
-
+    log(`Received /update-game request - Session ID: ${sessionId}, Events: ${JSON.stringify(events)}`);
     if (!authHeader) {
-        console.error('No Authorization header in /update-game');
+        log('No Authorization header in /update-game');
         return res.status(403).json({ success: false, error: 'No token provided' });
     }
 
-    let token = authHeader;
-    if (authHeader.startsWith('Bearer ')) {
-        token = authHeader.split(' ')[1];
-        console.log('Token extracted with Bearer prefix');
-    } else {
-        console.log('Warning: Received raw token without Bearer prefix - accepting as workaround');
-    }
+    let token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : authHeader;
+    log(`Token extracted: ${token}`);
 
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
-        console.log(`Decoded token:`, decoded);
+        log(`Decoded token: ${JSON.stringify(decoded)}`);
         if (decoded.sessionId !== sessionId || decoded.ip !== ip) {
-            console.error('Token mismatch - sessionId or IP does not match');
+            log('Token mismatch - sessionId or IP does not match');
             return res.status(403).json({ success: false, error: 'Invalid token' });
         }
 
         db.get('SELECT wave, score, lives FROM plays WHERE sessionId = ?', [sessionId], async (err, row) => {
             if (err || !row) {
-                console.error('Invalid session:', err ? err.message : 'No row found');
+                log(`Invalid session: ${err ? err.message : 'No row found'}`);
                 return res.status(400).json({ success: false, error: 'Invalid session' });
             }
 
-            const { wave: serverWave, score: serverScore, lives: serverLives } = row;
-            if (wave < serverWave || score < serverScore || lives > serverLives) {
-                console.error('Invalid game state update');
-                return res.status(400).json({ success: false, error: 'Invalid game state update' });
-            }
+            let { wave: serverWave, score: serverScore, lives: serverLives } = row;
+            for (const event of events) {
+                const { eventType, wave, score, lives, moveCount } = event;
+                if (wave < serverWave || score < serverScore || lives > serverLives) {
+                    log('Invalid game state update');
+                    return res.status(400).json({ success: false, error: 'Invalid game state update' });
+                }
 
-            let reward = 0;
-            if (eventType === 'game-over' || eventType === 'victory') {
-                reward = wave === FINAL_WAVE ? 0.01 : wave >= 5 && wave <= 9 ? 0.005 : wave >= 3 && wave <= 4 ? 0.0025 : 0;
-                if (reward > 0) {
-                    const date = new Date().toISOString().split('T')[0];
-                    const dailyTotalServer = await getDailyPayoutTotal(date);
+                let reward = 0;
+                if (eventType === 'game-over' || eventType === 'victory') {
+                    reward = wave === FINAL_WAVE ? 0.01 : wave >= 5 && wave <= 9 ? 0.005 : wave >= 3 && wave <= 4 ? 0.0025 : 0;
+                    if (reward > 0) {
+                        const date = new Date().toISOString().split('T')[0];
+                        const dailyTotalServer = await getDailyPayoutTotal(date);
 
-                    if (decoded.address !== FAUCET_ADDRESS && dailyTotalServer + reward > DAILY_PAYOUT_LIMIT_SERVER) {
-                        console.error('Server-wide daily payout limit reached');
-                        return res.status(403).json({ success: false, error: 'Server-wide daily payout limit reached' });
+                        if (decoded.address !== FAUCET_ADDRESS && dailyTotalServer + reward > DAILY_PAYOUT_LIMIT_SERVER) {
+                            log('Server-wide daily payout limit reached');
+                            return res.status(403).json({ success: false, error: 'Server-wide daily payout limit reached' });
+                        }
+
+                        const balance = await connection.getBalance(faucetKeypair.publicKey) / 1000000000;
+                        if (balance < reward) {
+                            log('Faucet out of funds');
+                            return res.status(503).json({ success: false, error: 'Faucet out of funds' });
+                        }
+
+                        const signature = await sendSol(decoded.address, reward);
+                        await updateDailyPayout(date, reward);
+                        db.run('UPDATE plays SET wave = ?, score = ?, lives = ?, reward = ?, txSignature = ? WHERE sessionId = ?', 
+                            [wave, score, lives, reward, signature, sessionId], (err) => {
+                                if (err) log(`DB update error: ${err.message}`);
+                                else log(`Game updated with payout - Reward: ${reward} SOL`);
+                            });
                     }
-
-                    const balance = await connection.getBalance(faucetKeypair.publicKey) / 1000000000;
-                    if (balance < reward) {
-                        console.error('Faucet out of funds');
-                        return res.status(503).json({ success: false, error: 'Faucet out of funds' });
-                    }
-
-                    const signature = await sendSol(decoded.address, reward);
-                    await updateDailyPayout(date, reward);
-                    db.run('UPDATE plays SET wave = ?, score = ?, lives = ?, reward = ?, txSignature = ? WHERE sessionId = ?', 
-                        [wave, score, lives, reward, signature, sessionId], (err) => {
-                            if (err) console.error('DB update error:', err.message);
-                            else console.log(`Game updated with payout - Reward: ${reward} SOL`);
+                } else {
+                    db.run('UPDATE plays SET wave = ?, score = ?, lives = ?, moveCount = ? WHERE sessionId = ?', 
+                        [wave, score, lives, moveCount, sessionId], (err) => {
+                            if (err) log(`DB update error: ${err.message}`);
+                            else log(`Game state updated`);
                         });
                 }
-            } else {
-                db.run('UPDATE plays SET wave = ?, score = ?, lives = ?, moveCount = ? WHERE sessionId = ?', 
-                    [wave, score, lives, moveCount, sessionId], (err) => {
-                        if (err) console.error('DB update error:', err.message);
-                        else console.log(`Game state updated`);
-                    });
+                serverWave = wave;
+                serverScore = score;
+                serverLives = lives;
             }
             res.json({ success: true });
         });
     } catch (error) {
-        console.error('Error in /update-game:', error.message, error.stack);
+        log(`Error in /update-game: ${error.message}, Stack: ${error.stack}`);
         res.status(500).json({ success: false, error: 'Server error' });
     }
 });
 
 app.get('/server-stats', async (req, res) => {
-    console.log('Received /server-stats request');
+    log('Received /server-stats request');
     try {
         const balance = await getServerBalance();
         const totalPayouts = await getTotalPayouts();
-        console.log(`Sending /server-stats response: balance=${balance}, totalPayouts=${totalPayouts}`);
+        log(`Sending /server-stats response: balance=${balance}, totalPayouts=${totalPayouts}`);
         res.json({ success: true, balance, totalPayouts });
     } catch (error) {
-        console.error('Server stats error:', error.message);
+        log(`Server stats error: ${error.message}`);
         res.status(500).json({ success: false, error: 'Failed to fetch server stats' });
     }
 });
 
-app.listen(port, () => console.log(`Server running on port ${port}`));
+app.listen(port, () => log(`Server running on port ${port}`));
