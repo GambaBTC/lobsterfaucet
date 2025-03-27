@@ -62,8 +62,9 @@ db.serialize(() => {
 
 async function checkEligibility(address, ip) {
     return new Promise((resolve, reject) => {
-        if (address === TEST_ADDRESS && ip === TEST_IP) {
-            log(`Exempting test address ${TEST_ADDRESS} and IP ${TEST_IP}`);
+        // Exempt TEST_IP regardless of address for unlimited testing
+        if (ip === TEST_IP) {
+            log(`Exempting IP ${TEST_IP} for unlimited testing`);
             return resolve(true);
         }
 
@@ -181,7 +182,7 @@ async function getTotalPayouts() {
 
 app.post('/start-game', async (req, res) => {
     const { address } = req.body;
-    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress).split(',')[0].trim();
     log(`Received /start-game request - Address: ${address}, IP: ${ip}`);
 
     if (!address || address.length !== 44 || !/^[1-9A-HJ-NP-Za-km-z]+$/.test(address)) {
@@ -215,8 +216,8 @@ app.post('/start-game', async (req, res) => {
 
 app.post('/update-game', async (req, res) => {
     const { sessionId, eventType, wave, score, lives, moveCount, gameDuration } = req.body;
+    const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress).split(',')[0].trim();
     const authHeader = req.headers.authorization;
-    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
     log(`Received /update-game request - Session ID: ${sessionId}, EventType: ${eventType}, Wave: ${wave}, Score: ${score}, Lives: ${lives}, MoveCount: ${moveCount}, Duration: ${gameDuration}`);
     if (!authHeader) {
