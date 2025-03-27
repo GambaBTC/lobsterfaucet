@@ -802,7 +802,7 @@
                 scoreDisplay.textContent = `Score: ${score}`;
                 createEnemies();
             }
-            if (Date.now() - lastUpdateTime > 5000) {
+            if (Date.now() - lastUpdateTime > 30000) {
                 updateServer('heartbeat');
                 lastUpdateTime = Date.now();
             }
