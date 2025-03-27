@@ -12,7 +12,6 @@ dotenv.config();
 const app = express();
 const port = 3000;
 
-// Logging setup
 const logStream = fs.createWriteStream('server.log', { flags: 'a' });
 const log = (message) => {
     const timestamp = new Date().toISOString();
@@ -38,7 +37,7 @@ const faucetKeypair = Keypair.fromSecretKey(secretKey);
 const FAUCET_ADDRESS = faucetKeypair.publicKey.toString();
 const TEST_IP = '148.71.55.160';
 const TEST_ADDRESS = '7MQe73raf4DtyWcAG2sM7wvouZE72BUsxVe65GxRjj2A';
-const JWT_SECRET = process.env.JWT_SECRET || 'default_secret'; // Fallback for testing
+const JWT_SECRET = process.env.JWT_SECRET || 'default_secret';
 const DAILY_PAYOUT_LIMIT_SERVER = 1;
 
 const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
@@ -197,11 +196,11 @@ app.post('/start-game', async (req, res) => {
 });
 
 app.post('/update-game', updateGameRateLimit, async (req, res) => {
-    const { sessionId, events } = req.body;
+    const { sessionId, events, eventType, wave, score, lives, moveCount } = req.body;
     const authHeader = req.headers.authorization;
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
-    log(`Received /update-game request - Session ID: ${sessionId}, Events: ${JSON.stringify(events)}`);
+    log(`Received /update-game request - Session ID: ${sessionId}, Events: ${JSON.stringify(events)}, EventType: ${eventType}`);
     if (!authHeader) {
         log('No Authorization header in /update-game');
         return res.status(403).json({ success: false, error: 'No token provided' });
@@ -225,8 +224,15 @@ app.post('/update-game', updateGameRateLimit, async (req, res) => {
             }
 
             let { wave: serverWave, score: serverScore, lives: serverLives } = row;
-            for (const event of events) {
-                const { eventType, wave, score, lives, moveCount } = event;
+            const updates = events ? events : eventType ? [{ eventType, wave, score, lives, moveCount }] : [];
+
+            if (updates.length === 0) {
+                log('No valid updates provided');
+                return res.status(400).json({ success: false, error: 'No updates provided' });
+            }
+
+            for (const update of updates) {
+                const { eventType, wave, score, lives, moveCount } = update;
                 if (wave < serverWave || score < serverScore || lives > serverLives) {
                     log('Invalid game state update');
                     return res.status(400).json({ success: false, error: 'Invalid game state update' });
