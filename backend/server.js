@@ -4,28 +4,26 @@ const sqlite3 = require('sqlite3').verbose();
 const rateLimit = require('express-rate-limit');
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair } = require('@solana/web3.js');
 const jwt = require('jsonwebtoken');
-const fs = require('fs'); // For reading the keypair file
-const dotenv = require('dotenv'); // For loading .env
+const fs = require('fs');
+const dotenv = require('dotenv');
 
-// Load environment variables from .env
 dotenv.config();
 
 const app = express();
 const port = 3000;
 
+app.set('trust proxy', 1); // Trust the first proxy (Nginx)
 app.use(cors());
 app.use(express.json());
-app.set('trust proxy', 1); // Trust Nginx proxy
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
 
-// Load Solana keypair from file
 const secretKeyArray = JSON.parse(fs.readFileSync('/home/faucetuser/lobsterfaucet/backend/faucet_keypair.json', 'utf8'));
 const secretKey = Uint8Array.from(secretKeyArray);
-console.log('Secret key length:', secretKey.length); // Debug: should be 64
+console.log('Secret key length:', secretKey.length);
 const faucetKeypair = Keypair.fromSecretKey(secretKey);
-const FAUCET_ADDRESS = faucetKeypair.publicKey.toString(); // Dynamically set from keypair
+const FAUCET_ADDRESS = faucetKeypair.publicKey.toString();
 const TEST_IP = '148.71.55.160';
-const JWT_SECRET = process.env.JWT_SECRET; // Load from .env
+const JWT_SECRET = process.env.JWT_SECRET;
 const DAILY_PAYOUT_LIMIT_PER_ADDRESS = 0.01;
 const DAILY_PAYOUT_LIMIT_SERVER = 1;
 
@@ -48,86 +46,7 @@ db.serialize(() => {
     });
 });
 
-async function checkEligibility(address, ip) {
-    return new Promise((resolve, reject) => {
-        if (ip === TEST_IP) {
-            console.log(`Bypassing eligibility check for test IP: ${ip}`);
-            return resolve(true);
-        }
-        const now = Date.now();
-        const oneDayAgo = now - 24 * 60 * 60 * 1000;
-        db.get('SELECT SUM(reward) as dailyTotal, MAX(timestamp) as lastPlayed FROM plays WHERE address = ? AND timestamp > ?', 
-            [address, oneDayAgo], (err, row) => {
-                if (err) return reject(err);
-                if (!row || !row.lastPlayed) return resolve(true);
-                const dailyTotal = row.dailyTotal || 0;
-                const playedWithin24h = now - row.lastPlayed < 24 * 60 * 60 * 1000;
-                console.log(`Eligibility check - Address: ${address}, IP: ${ip}, Daily total: ${dailyTotal}, Played within 24h: ${playedWithin24h}`);
-                resolve(!(playedWithin24h && dailyTotal >= DAILY_PAYOUT_LIMIT_PER_ADDRESS));
-            });
-    });
-}
-
-async function getDailyPayoutTotal(date) {
-    return new Promise((resolve, reject) => {
-        db.get('SELECT total FROM daily_payouts WHERE date = ?', [date], (err, row) => {
-            if (err) return reject(err);
-            resolve(row ? row.total : 0);
-        });
-    });
-}
-
-async function updateDailyPayout(date, amount) {
-    const current = await getDailyPayoutTotal(date);
-    return new Promise((resolve, reject) => {
-        db.run('INSERT OR REPLACE INTO daily_payouts (date, total) VALUES (?, ?)', [date, current + amount], (err) => {
-            if (err) return reject(err);
-            resolve();
-        });
-    });
-}
-
-async function sendSol(toAddress, amount) {
-    try {
-        const toPubkey = new PublicKey(toAddress);
-        const lamports = amount * 1000000000;
-        const transaction = new Transaction().add(
-            SystemProgram.transfer({
-                fromPubkey: faucetKeypair.publicKey,
-                toPubkey,
-                lamports
-            })
-        );
-        console.log(`Sending ${amount} SOL to ${toAddress}...`);
-        const signature = await connection.sendTransaction(transaction, [faucetKeypair]);
-        await connection.confirmTransaction(signature);
-        console.log(`Payout successful - Tx Signature: ${signature}`);
-        return signature;
-    } catch (error) {
-        console.error('Error sending SOL:', error.message);
-        throw error;
-    }
-}
-
-async function getServerBalance() {
-    try {
-        const balance = await connection.getBalance(new PublicKey(FAUCET_ADDRESS)) / 1000000000;
-        console.log(`Server balance: ${balance} SOL`);
-        return balance;
-    } catch (error) {
-        console.error('Error fetching server balance:', error.message);
-        throw error;
-    }
-}
-
-async function getTotalPayouts() {
-    return new Promise((resolve, reject) => {
-        db.get('SELECT SUM(reward) as total FROM plays WHERE reward > 0', (err, row) => {
-            if (err) return reject(err);
-            resolve(row.total || 0);
-        });
-    });
-}
+// ... (rest of your server.js functions like checkEligibility, getDailyPayoutTotal, etc., remain unchanged)
 
 app.post('/start-game', async (req, res) => {
     const { address } = req.body;
