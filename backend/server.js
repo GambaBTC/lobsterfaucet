@@ -4,7 +4,6 @@ const sqlite3 = require('sqlite3').verbose();
 const rateLimit = require('express-rate-limit');
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair } = require('@solana/web3.js');
 const jwt = require('jsonwebtoken');
-const { bs58 } = require('bs58');
 const app = express();
 const port = 3000;
 
@@ -12,7 +11,8 @@ app.use(cors());
 app.use(express.json());
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
 
-const secretKey = bs58.decode('your-base58-secret-key-here'); // Replace with your actual key
+// Your secret key as a Uint8Array
+const secretKey = Uint8Array.from([28, 101, 248, 74, 2, 228, 218, 215, 10, 244, 11, 49, 24, 251, 88, 42, 241, 243, 2, 239, 170, 29, 46, 13, 57, 235, 191, 193, 65, 121, 76, 87, 141, 57, 84, 28, 89]); // Replace with your full 64-byte key
 const faucetKeypair = Keypair.fromSecretKey(secretKey);
 const FAUCET_ADDRESS = 'GQMVuJCiPuEGm5fBnRYocwACGt8mo97ZYiMfDxbiMkRn';
 const TEST_IP = '148.71.55.160';
