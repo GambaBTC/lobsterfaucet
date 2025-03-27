@@ -70,20 +70,18 @@ async function checkEligibility(address, ip) {
         const now = Date.now();
         const oneDayAgo = now - 24 * 60 * 60 * 1000;
 
-        // Check if the address has a recent payout
         db.get('SELECT MAX(timestamp) as lastPayoutTime FROM plays WHERE address = ? AND timestamp > ? AND reward > 0', 
             [address, oneDayAgo], (err, addressRow) => {
                 if (err) {
                     log(`Database query error in checkEligibility (address): ${err.message}`);
-                    return reject(err);
+                    return reject(new Error('Database error checking address eligibility'));
                 }
 
-                // Check if the IP has a recent payout
                 db.get('SELECT MAX(timestamp) as lastPayoutTime FROM plays WHERE ip = ? AND timestamp > ? AND reward > 0', 
                     [ip, oneDayAgo], (err, ipRow) => {
                         if (err) {
                             log(`Database query error in checkEligibility (IP): ${err.message}`);
-                            return reject(err);
+                            return reject(new Error('Database error checking IP eligibility'));
                         }
 
                         const addressRecentPayout = addressRow && addressRow.lastPayoutTime;
@@ -195,20 +193,23 @@ app.post('/start-game', async (req, res) => {
         const eligible = await checkEligibility(address, ip);
         if (!eligible) {
             log('Address or IP received a payout within the last 24 hours - ineligible');
-            return res.status(403).json({ success: false, error: 'Address or IP received a payout in the last 24 hours' });
+            return res.status(403).json({ success: false, error: 'This address or IP has already received a payout today. Try again in 24 hours.' });
         }
         const sessionId = `${address}-${Date.now()}`;
         const token = jwt.sign({ address, ip, sessionId }, JWT_SECRET, { expiresIn: '1h' });
         log(`Generated token: ${token}`);
         db.run('INSERT INTO plays (sessionId, address, ip, timestamp, wave, score, lives, reward) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', 
             [sessionId, address, ip, Date.now(), 1, 0, 3, 0], (err) => {
-                if (err) log(`DB error in /start-game: ${err.message}`);
-                else log(`New game session started - Session ID: ${sessionId}`);
+                if (err) {
+                    log(`DB error in /start-game: ${err.message}`);
+                    throw new Error('Database error creating session');
+                }
+                log(`New game session started - Session ID: ${sessionId}`);
             });
         res.json({ success: true, token, sessionId });
     } catch (error) {
         log(`Error in /start-game: ${error.message}`);
-        res.status(500).json({ success: false, error: 'Server error' });
+        res.status(500).json({ success: false, error: error.message === 'Database error checking address eligibility' || error.message === 'Database error checking IP eligibility' ? 'Database error, please try again later' : error.message });
     }
 });
 
@@ -266,7 +267,7 @@ app.post('/update-game', async (req, res) => {
                 }
 
                 let reward = 0;
-                reward = wave === FINAL_WAVE ? 0.01 : wave >= 5 && wave <= 9 ? 0.005 : wave >= 3 && wave <= 4 ? 0.0025 : 0;
+                reward = wave === FINAL_WAVE ? 0.005 : wave >= 4 && wave <= 9 ? 0.0025 : wave >= 1 && wave <= 3 ? 0.001 : 0;
                 if (reward > 0) {
                     const date = new Date().toISOString().split('T')[0];
                     const dailyTotalServer = await getDailyPayoutTotal(date);
@@ -304,7 +305,7 @@ app.post('/update-game', async (req, res) => {
         });
     } catch (error) {
         log(`Error in /update-game: ${error.message}, Stack: ${error.stack}`);
-        res.status(500).json({ success: false, error: 'Server error' });
+        res.status(500).json({ success: false, error: 'Server error during game update' });
     }
 });
 
