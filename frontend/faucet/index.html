@@ -278,14 +278,13 @@
         let sessionId = '';
         let lastMoveTime = 0;
         let moveCount = 0;
-        let lastUpdateTime = 0;
         let lastServerUpdate = 0;
-        const UPDATE_COOLDOWN = 1000; // Increased to 1 second
+        const UPDATE_COOLDOWN = 2000; // 2 seconds
         const TARGET_FPS = 60;
         const FIXED_TIME_STEP = 1 / TARGET_FPS;
         let updateQueue = [];
         let lastBatchSend = 0;
-        const BATCH_INTERVAL = 1000; // Send updates every 1 second
+        const BATCH_INTERVAL = 2000; // Send updates every 2 seconds
         
         let player;
         let bullets = [];
@@ -346,7 +345,7 @@
                 this.height = 30;
                 this.x = canvas.width / 2 - this.width / 2;
                 this.y = canvas.height - 60;
-                this.speed = 150; // Pixels per second
+                this.speed = 150;
                 this.color = '#4a90e2';
                 this.cooldown = 0;
                 this.maxCooldown = 35;
@@ -438,7 +437,7 @@
                 this.width = width;
                 this.height = height;
                 this.color = color;
-                this.speed = speed * 60; // 180 pixels/second
+                this.speed = speed * 60;
                 this.trail = [];
                 this.maxTrailLength = 5;
             }
@@ -817,13 +816,16 @@
                 if (!response.ok) {
                     console.error(`Server responded with status: ${response.status}`);
                     if (response.status === 429) {
-                        console.warn('429 Too Many Requests, retrying in 5s');
-                        setTimeout(() => sendServerUpdateBatch(batch), 5000);
+                        const delay = 5000 * Math.pow(2, Math.min(3, Math.floor((now - lastBatchSend) / 10000))); // Exponential backoff
+                        console.warn(`429 Too Many Requests, retrying in ${delay/1000}s`);
+                        setTimeout(() => sendServerUpdateBatch(), delay);
+                        updateQueue.push(...batch); // Re-queue
+                        return;
                     }
-                } else {
-                    const result = await response.json();
-                    console.log('Batch update response:', result);
+                    throw new Error(`Server error: ${response.status}`);
                 }
+                const result = await response.json();
+                console.log('Batch update response:', result);
             } catch (error) {
                 console.error('Server update failed:', error.message);
                 updateQueue.push(...batch); // Re-queue on failure
@@ -868,10 +870,6 @@
                 score += waveBonus;
                 scoreDisplay.textContent = `Score: ${score}`;
                 createEnemies();
-            }
-            if (Date.now() - lastUpdateTime > 30000) {
-                queueServerUpdate('heartbeat');
-                lastUpdateTime = Date.now();
             }
             if (Date.now() - lastBatchSend >= BATCH_INTERVAL) {
                 sendServerUpdateBatch();
@@ -949,7 +947,6 @@
             accumulator = 0;
             moveCount = 0;
             lastMoveTime = Date.now();
-            lastUpdateTime = Date.now();
             lastServerUpdate = 0;
             lastBatchSend = 0;
             updateQueue = [];
