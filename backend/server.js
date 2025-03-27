@@ -4,6 +4,12 @@ const sqlite3 = require('sqlite3').verbose();
 const rateLimit = require('express-rate-limit');
 const { Connection, PublicKey, Transaction, SystemProgram, Keypair } = require('@solana/web3.js');
 const jwt = require('jsonwebtoken');
+const fs = require('fs'); // For reading the keypair file
+const dotenv = require('dotenv'); // For loading .env
+
+// Load environment variables from .env
+dotenv.config();
+
 const app = express();
 const port = 3000;
 
@@ -12,13 +18,14 @@ app.use(express.json());
 app.set('trust proxy', 1); // Trust Nginx proxy
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
 
-// Replace with your full 64-byte key
-const secretKey = Uint8Array.from([, /* a]);
+// Load Solana keypair from file
+const secretKeyArray = JSON.parse(fs.readFileSync('/home/faucetuser/lobsterfaucet/backend/faucet_keypair.json', 'utf8'));
+const secretKey = Uint8Array.from(secretKeyArray);
 console.log('Secret key length:', secretKey.length); // Debug: should be 64
 const faucetKeypair = Keypair.fromSecretKey(secretKey);
-const FAUCET_ADDRESS = 'GQMVuJCiPuEGm5fBnRYocwACGt8mo97ZYiMfDxbiMkRn';
+const FAUCET_ADDRESS = faucetKeypair.publicKey.toString(); // Dynamically set from keypair
 const TEST_IP = '148.71.55.160';
-const JWT_SECRET = 'your-secret-key'; // Ensure this matches across all uses
+const JWT_SECRET = process.env.JWT_SECRET; // Load from .env
 const DAILY_PAYOUT_LIMIT_PER_ADDRESS = 0.01;
 const DAILY_PAYOUT_LIMIT_SERVER = 1;
 
@@ -37,11 +44,7 @@ db.serialize(() => {
         if (err) console.error('Error creating daily_payouts table:', err.message);
     });
     db.run('ALTER TABLE plays ADD COLUMN moveCount INTEGER DEFAULT 0', (err) => {
-        if (err && !err.message.includes('duplicate column name')) {
-            console.error('Error adding moveCount column:', err.message);
-        } else {
-            console.log('moveCount column added or already exists');
-        }
+        if (err && !err.message.includes('duplicate column name')) console.error('Error adding moveCount:', err.message);
     });
 });
 
