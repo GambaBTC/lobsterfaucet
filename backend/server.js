@@ -24,11 +24,11 @@ app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json());
 
-// Global rate limit: 500 requests per 15 minutes
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 500 }));
+// Global rate limit: 10000 requests per 15 minutes
+app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 10000 }));
 
-// Custom rate limit for /update-game: 5000 requests per 15 minutes
-const updateGameRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 5000 });
+// Custom rate limit for /update-game: 10000 requests per 15 minutes
+const updateGameRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 10000 });
 
 const secretKeyArray = JSON.parse(fs.readFileSync('/home/faucetuser/lobsterfaucet/backend/faucet_keypair.json', 'utf8'));
 const secretKey = Uint8Array.from(secretKeyArray);
@@ -39,6 +39,7 @@ const TEST_IP = '148.71.55.160';
 const TEST_ADDRESS = '7MQe73raf4DtyWcAG2sM7wvouZE72BUsxVe65GxRjj2A';
 const JWT_SECRET = process.env.JWT_SECRET || 'default_secret';
 const DAILY_PAYOUT_LIMIT_SERVER = 1;
+const FINAL_WAVE = 10;
 
 const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
 
@@ -196,11 +197,11 @@ app.post('/start-game', async (req, res) => {
 });
 
 app.post('/update-game', updateGameRateLimit, async (req, res) => {
-    const { sessionId, events, eventType, wave, score, lives, moveCount } = req.body;
+    const { sessionId, eventType, wave, score, lives, moveCount } = req.body;
     const authHeader = req.headers.authorization;
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
-    log(`Received /update-game request - Session ID: ${sessionId}, Events: ${JSON.stringify(events)}, EventType: ${eventType}`);
+    log(`Received /update-game request - Session ID: ${sessionId}, EventType: ${eventType}, Wave: ${wave}, Score: ${score}, Lives: ${lives}, MoveCount: ${moveCount}`);
     if (!authHeader) {
         log('No Authorization header in /update-game');
         return res.status(403).json({ success: false, error: 'No token provided' });
@@ -223,47 +224,43 @@ app.post('/update-game', updateGameRateLimit, async (req, res) => {
                 return res.status(400).json({ success: false, error: 'Invalid session' });
             }
 
-            let { wave: serverWave, score: serverScore, lives: serverLives } = row;
-            const updates = events ? events : eventType ? [{ eventType, wave, score, lives, moveCount }] : [];
-
-            if (updates.length === 0) {
-                log('No valid updates provided');
-                return res.status(400).json({ success: false, error: 'No updates provided' });
+            const { wave: serverWave, score: serverScore, lives: serverLives } = row;
+            if (wave < serverWave || score < serverScore || lives > serverLives) {
+                log('Invalid game state update');
+                return res.status(400).json({ success: false, error: 'Invalid game state update' });
             }
 
-            for (const update of updates) {
-                const { eventType, wave, score, lives, moveCount } = update;
-                if (wave < serverWave || score < serverScore || lives > serverLives) {
-                    log('Invalid game state update');
-                    return res.status(400).json({ success: false, error: 'Invalid game state update' });
-                }
+            const maxScore = wave <= 3 ? 150 * wave : wave <= 5 ? 300 * wave : 600 * wave;
+            if (wave > FINAL_WAVE + 1 || score > maxScore || moveCount < wave * 10) {
+                log(`Cheat detected - Wave: ${wave}, Score: ${score}, MoveCount: ${moveCount}`);
+                return res.status(400).json({ success: false, error: 'Invalid game data' });
+            }
 
-                let reward = 0;
-                if (eventType === 'game-over' || eventType === 'victory') {
-                    reward = wave === FINAL_WAVE ? 0.01 : wave >= 5 && wave <= 9 ? 0.005 : wave >= 3 && wave <= 4 ? 0.0025 : 0;
-                    if (reward > 0) {
-                        const date = new Date().toISOString().split('T')[0];
-                        const dailyTotalServer = await getDailyPayoutTotal(date);
+            let reward = 0;
+            if (eventType === 'game-over' || eventType === 'victory') {
+                reward = wave === FINAL_WAVE ? 0.01 : wave >= 5 && wave <= 9 ? 0.005 : wave >= 3 && wave <= 4 ? 0.0025 : 0;
+                if (reward > 0) {
+                    const date = new Date().toISOString().split('T')[0];
+                    const dailyTotalServer = await getDailyPayoutTotal(date);
 
-                        if (decoded.address !== FAUCET_ADDRESS && dailyTotalServer + reward > DAILY_PAYOUT_LIMIT_SERVER) {
-                            log('Server-wide daily payout limit reached');
-                            return res.status(403).json({ success: false, error: 'Server-wide daily payout limit reached' });
-                        }
-
-                        const balance = await connection.getBalance(faucetKeypair.publicKey) / 1000000000;
-                        if (balance < reward) {
-                            log('Faucet out of funds');
-                            return res.status(503).json({ success: false, error: 'Faucet out of funds' });
-                        }
-
-                        const signature = await sendSol(decoded.address, reward);
-                        await updateDailyPayout(date, reward);
-                        db.run('UPDATE plays SET wave = ?, score = ?, lives = ?, reward = ?, txSignature = ? WHERE sessionId = ?', 
-                            [wave, score, lives, reward, signature, sessionId], (err) => {
-                                if (err) log(`DB update error: ${err.message}`);
-                                else log(`Game updated with payout - Reward: ${reward} SOL`);
-                            });
+                    if (decoded.address !== FAUCET_ADDRESS && dailyTotalServer + reward > DAILY_PAYOUT_LIMIT_SERVER) {
+                        log('Server-wide daily payout limit reached');
+                        return res.status(403).json({ success: false, error: 'Server-wide daily payout limit reached' });
                     }
+
+                    const balance = await connection.getBalance(faucetKeypair.publicKey) / 1000000000;
+                    if (balance < reward) {
+                        log('Faucet out of funds');
+                        return res.status(503).json({ success: false, error: 'Faucet out of funds' });
+                    }
+
+                    const signature = await sendSol(decoded.address, reward);
+                    await updateDailyPayout(date, reward);
+                    db.run('UPDATE plays SET wave = ?, score = ?, lives = ?, reward = ?, txSignature = ?, moveCount = ? WHERE sessionId = ?', 
+                        [wave, score, lives, reward, signature, moveCount, sessionId], (err) => {
+                            if (err) log(`DB update error: ${err.message}`);
+                            else log(`Game updated with payout - Reward: ${reward} SOL`);
+                        });
                 } else {
                     db.run('UPDATE plays SET wave = ?, score = ?, lives = ?, moveCount = ? WHERE sessionId = ?', 
                         [wave, score, lives, moveCount, sessionId], (err) => {
@@ -271,9 +268,9 @@ app.post('/update-game', updateGameRateLimit, async (req, res) => {
                             else log(`Game state updated`);
                         });
                 }
-                serverWave = wave;
-                serverScore = score;
-                serverLives = lives;
+            } else {
+                log('Invalid event type for update');
+                return res.status(400).json({ success: false, error: 'Invalid event type' });
             }
             res.json({ success: true });
         });
