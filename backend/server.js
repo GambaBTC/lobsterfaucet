@@ -9,14 +9,16 @@ const port = 3000;
 
 app.use(cors());
 app.use(express.json());
+app.set('trust proxy', 1); // Trust Nginx proxy
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
 
-// Your secret key as a Uint8Array
-const secretKey = Uint8Array.from([136,171,32,115,214,213,215,86,150,215,230,163,165,243,76,57,2,18,142,11,246,211,88,25,2,242,102,28,101,248,74,2,228,218,215,10,244,11,49,24,251,88,42,241,243,2,239,170,29,46,13,57,235,191,193,65,121,76,87,141,57,84,28,89]); // Replace with your full 64-byte key
+// Replace with your full 64-byte key
+const secretKey = Uint8Array.from([, /* a]);
+console.log('Secret key length:', secretKey.length); // Debug: should be 64
 const faucetKeypair = Keypair.fromSecretKey(secretKey);
 const FAUCET_ADDRESS = 'GQMVuJCiPuEGm5fBnRYocwACGt8mo97ZYiMfDxbiMkRn';
 const TEST_IP = '148.71.55.160';
-const JWT_SECRET = 'b72d12ff8a631cc4d516925ee4b66a282f053e3d0c6575b86dae1978f3a85f45253dc28206c324eb4f4c250b6f72f43e56adb7d0aa52bc6628dfb19afd86d2534465a63200d2fca42ecccc9e1eccdd7f161c337c0e52b81a6b1728707ef2b5d3ca8559de344b4eca9f1a66111028aa425fef528a653c11aef218e12a9e91b43e2f1b2bce0cc892bb79ea381868ac8cb4ebc79c7de7a7172a02e4c7828714eb1aef00cf66a7901348c6e0b12a69333186b47912280c6ede57fc73e4413d74ea794233a78375553342e773e70b635b10fb18f267a35ca94ad3ba2fc99313647abe371fe6acfca34ff538d37f6b5ba934593bbf4f12d5cb6e07f3e3bf788f593d8c'; // Ensure this matches across all uses
+const JWT_SECRET = 'your-secret-key'; // Ensure this matches across all uses
 const DAILY_PAYOUT_LIMIT_PER_ADDRESS = 0.01;
 const DAILY_PAYOUT_LIMIT_SERVER = 1;
 
@@ -33,6 +35,13 @@ db.serialize(() => {
     });
     db.run('CREATE TABLE IF NOT EXISTS daily_payouts (date TEXT, total REAL)', (err) => {
         if (err) console.error('Error creating daily_payouts table:', err.message);
+    });
+    db.run('ALTER TABLE plays ADD COLUMN moveCount INTEGER DEFAULT 0', (err) => {
+        if (err && !err.message.includes('duplicate column name')) {
+            console.error('Error adding moveCount column:', err.message);
+        } else {
+            console.log('moveCount column added or already exists');
+        }
     });
 });
 
