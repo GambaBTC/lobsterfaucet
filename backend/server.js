@@ -12,15 +12,15 @@ dotenv.config();
 const app = express();
 const port = 3000;
 
-app.set('trust proxy', 1); // Trust the first proxy (Nginx)
+app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json());
 
-// Global rate limit: 100 requests per 15 minutes for non-/update-game endpoints
+// Global rate limit: 100 requests per 15 minutes
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
 
-// Custom rate limit for /update-game: 1000 requests per 15 minutes
-const updateGameRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 1000 });
+// Custom rate limit for /update-game: 2000 requests per 15 minutes
+const updateGameRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 2000 });
 
 const secretKeyArray = JSON.parse(fs.readFileSync('/home/faucetuser/lobsterfaucet/backend/faucet_keypair.json', 'utf8'));
 const secretKey = Uint8Array.from(secretKeyArray);
@@ -28,7 +28,7 @@ console.log('Secret key length:', secretKey.length);
 const faucetKeypair = Keypair.fromSecretKey(secretKey);
 const FAUCET_ADDRESS = faucetKeypair.publicKey.toString();
 const TEST_IP = '148.71.55.160';
-const TEST_ADDRESS = '7MQe73raf4DtyWcAG2sM7wvouZE72BUsxVe65GxRjj2A'; // Your server address
+const TEST_ADDRESS = '7MQe73raf4DtyWcAG2sM7wvouZE72BUsxVe65GxRjj2A';
 const JWT_SECRET = process.env.JWT_SECRET;
 const DAILY_PAYOUT_LIMIT_SERVER = 1;
 
@@ -53,7 +53,6 @@ db.serialize(() => {
 
 async function checkEligibility(address, ip) {
     return new Promise((resolve, reject) => {
-        // Exempt TEST_ADDRESS and TEST_IP combo from all blocks
         if (address === TEST_ADDRESS && ip === TEST_IP) {
             console.log(`Exempting test address ${TEST_ADDRESS} and IP ${TEST_IP} from eligibility checks`);
             return resolve(true);
@@ -192,7 +191,6 @@ app.post('/start-game', async (req, res) => {
     }
 });
 
-// Apply the custom rate limit to /update-game
 app.post('/update-game', updateGameRateLimit, async (req, res) => {
     const { sessionId, eventType, wave, score, lives, moveCount } = req.body;
     const authHeader = req.headers.authorization;
