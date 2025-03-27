@@ -23,12 +23,13 @@ const log = (message) => {
 app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json());
+app.use((req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store');
+    next();
+});
 
 // Global rate limit: 10000 requests per 15 minutes
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 10000 }));
-
-// Custom rate limit for /update-game: 10000 requests per 15 minutes
-const updateGameRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 10000 });
 
 const secretKeyArray = JSON.parse(fs.readFileSync('/home/faucetuser/lobsterfaucet/backend/faucet_keypair.json', 'utf8'));
 const secretKey = Uint8Array.from(secretKeyArray);
@@ -196,12 +197,12 @@ app.post('/start-game', async (req, res) => {
     }
 });
 
-app.post('/update-game', updateGameRateLimit, async (req, res) => {
-    const { sessionId, eventType, wave, score, lives, moveCount } = req.body;
+app.post('/update-game', async (req, res) => {
+    const { sessionId, eventType, wave, score, lives, moveCount, gameDuration } = req.body;
     const authHeader = req.headers.authorization;
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
-    log(`Received /update-game request - Session ID: ${sessionId}, EventType: ${eventType}, Wave: ${wave}, Score: ${score}, Lives: ${lives}, MoveCount: ${moveCount}`);
+    log(`Received /update-game request - Session ID: ${sessionId}, EventType: ${eventType}, Wave: ${wave}, Score: ${score}, Lives: ${lives}, MoveCount: ${moveCount}, Duration: ${gameDuration}`);
     if (!authHeader) {
         log('No Authorization header in /update-game');
         return res.status(403).json({ success: false, error: 'No token provided' });
@@ -230,14 +231,21 @@ app.post('/update-game', updateGameRateLimit, async (req, res) => {
                 return res.status(400).json({ success: false, error: 'Invalid game state update' });
             }
 
-            const maxScore = wave <= 3 ? 150 * wave : wave <= 5 ? 300 * wave : 600 * wave;
-            if (wave > FINAL_WAVE + 1 || score > maxScore || moveCount < wave * 10) {
-                log(`Cheat detected - Wave: ${wave}, Score: ${score}, MoveCount: ${moveCount}`);
-                return res.status(400).json({ success: false, error: 'Invalid game data' });
-            }
-
-            let reward = 0;
             if (eventType === 'game-over' || eventType === 'victory') {
+                const maxScore = wave <= 3 ? 200 * wave : wave <= 5 ? 400 * wave : 800 * wave;
+                const minMoves = wave * 50;
+                const minDuration = wave * 10;
+                if (
+                    wave > FINAL_WAVE + 1 ||
+                    score > maxScore ||
+                    moveCount < minMoves ||
+                    gameDuration < minDuration
+                ) {
+                    log(`Cheat detected - Wave: ${wave}, Score: ${score}, MoveCount: ${moveCount}, Duration: ${gameDuration}`);
+                    return res.status(400).json({ success: false, error: 'Invalid game data' });
+                }
+
+                let reward = 0;
                 reward = wave === FINAL_WAVE ? 0.01 : wave >= 5 && wave <= 9 ? 0.005 : wave >= 3 && wave <= 4 ? 0.0025 : 0;
                 if (reward > 0) {
                     const date = new Date().toISOString().split('T')[0];
