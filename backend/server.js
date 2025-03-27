@@ -15,7 +15,12 @@ const port = 3000;
 app.set('trust proxy', 1); // Trust the first proxy (Nginx)
 app.use(cors());
 app.use(express.json());
+
+// Global rate limit: 100 requests per 15 minutes for non-/update-game endpoints
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
+
+// Custom rate limit for /update-game: 1000 requests per 15 minutes
+const updateGameRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 1000 });
 
 const secretKeyArray = JSON.parse(fs.readFileSync('/home/faucetuser/lobsterfaucet/backend/faucet_keypair.json', 'utf8'));
 const secretKey = Uint8Array.from(secretKeyArray);
@@ -187,7 +192,8 @@ app.post('/start-game', async (req, res) => {
     }
 });
 
-app.post('/update-game', async (req, res) => {
+// Apply the custom rate limit to /update-game
+app.post('/update-game', updateGameRateLimit, async (req, res) => {
     const { sessionId, eventType, wave, score, lives, moveCount } = req.body;
     const authHeader = req.headers.authorization;
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
